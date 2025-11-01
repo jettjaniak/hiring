@@ -6,32 +6,27 @@ from flask import Flask, render_template, request, redirect, url_for, flash, jso
 import uuid
 import argparse
 from datetime import datetime
-from config import Config
 from database import Database
-from encryption import EncryptionManager
 from workflow_loader import WorkflowLoader
-from sync import SyncEngine
 import models
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Hiring Process Web Client')
-parser.add_argument('--data-dir', default=None, help='Data directory for client files')
+parser.add_argument('--data-dir', default=None, help='Data directory for client files (default: ~/.hiring-client)')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
 args = parser.parse_args()
 
 app = Flask(__name__)
 app.secret_key = 'hiring-process-demo-secret'
 
-# Initialize client
-config = Config(config_dir=args.data_dir)
-if not config.is_initialized():
-    print(f"ERROR: Client not initialized. Run './venv/bin/python cli.py {('--data-dir ' + args.data_dir) if args.data_dir else ''} init' first.")
-    exit(1)
+# Initialize database
+import os
+data_dir = args.data_dir or os.path.expanduser('~/.hiring-client')
+os.makedirs(data_dir, exist_ok=True)
+db_file = os.path.join(data_dir, 'hiring.db')
 
-encryption = EncryptionManager(config.encryption_key)
-db = Database(str(config.db_file))
+db = Database(db_file)
 db.init_db()
-sync_engine = SyncEngine(config.server_url, encryption)
 
 # Load workflow definitions
 workflow_loader = WorkflowLoader()
@@ -283,20 +278,6 @@ def add_candidate():
                 notes=request.form.get('notes')
             )
 
-            # Mark all set fields as dirty (new candidate needs to be synced)
-            if candidate.workflow_id:
-                candidate.workflow_id_dirty = True
-            if candidate.name:
-                candidate.name_dirty = True
-            if candidate.email:
-                candidate.email_dirty = True
-            if candidate.phone:
-                candidate.phone_dirty = True
-            if candidate.resume_url:
-                candidate.resume_url_dirty = True
-            if candidate.notes:
-                candidate.notes_dirty = True
-
             session.add(candidate)
             session.commit()
 
@@ -324,17 +305,12 @@ def edit_candidate(candidate_id):
             return redirect(url_for('index'))
 
         if request.method == 'POST':
-            # Update fields and mark as dirty
+            # Update fields
             fields_to_update = ['name', 'email', 'phone', 'resume_url', 'notes', 'workflow_id']
 
             for field in fields_to_update:
                 new_value = request.form.get(field)
                 setattr(candidate, field, new_value)
-                # Mark field as dirty
-                setattr(candidate, f'{field}_dirty', True)
-
-            # Manually set updated_at for user-initiated changes
-            candidate.updated_at = datetime.utcnow()
 
             session.commit()
             flash('Candidate updated successfully', 'success')
@@ -370,10 +346,6 @@ def delete_candidate(candidate_id):
         return redirect(url_for('view_candidate', candidate_id=candidate_id))
     finally:
         session.close()
-
-
-
-
 
 
 @app.route('/api/candidate/<candidate_id>/task/<task_identifier>/update', methods=['POST'])
@@ -418,12 +390,6 @@ def api_update_task(candidate_id, task_identifier):
             # Update existing task status
             task.status = new_status
 
-        # Mark status as dirty
-        task.status_dirty = True
-
-        # Manually set updated_at for user-initiated changes
-        task.updated_at = datetime.utcnow()
-
         session.commit()
 
         return {'success': True, 'status': new_status}, 200
@@ -434,273 +400,11 @@ def api_update_task(candidate_id, task_identifier):
         session.close()
 
 
-@app.route('/sync')
-def sync_view():
-    """Sync management console"""
-    session = db.get_session()
-    try:
-        # Get sync status
-        last_sync = config.last_sync
-        if last_sync:
-            last_sync_dt = datetime.fromisoformat(last_sync)
-            last_sync_str = last_sync_dt.strftime('%Y-%m-%d %H:%M:%S')
-        else:
-            last_sync_str = "Never"
-
-        # Count local changes
-        unsynced_candidates = session.query(models.Candidate).filter(
-            (models.Candidate.last_synced == None) |
-            (models.Candidate.updated_at > models.Candidate.last_synced)
-        ).count()
-
-        unsynced_tasks = session.query(models.CandidateTask).filter(
-            (models.CandidateTask.last_synced == None) |
-            (models.CandidateTask.updated_at > models.CandidateTask.last_synced)
-        ).count()
-
-        return render_template('sync.html',
-                             last_sync=last_sync_str,
-                             unsynced_candidates=unsynced_candidates,
-                             unsynced_tasks=unsynced_tasks)
-    finally:
-        session.close()
-
-
-@app.route('/api/sync/push', methods=['POST'])
-def sync_push():
-    """Push local changes to server"""
-    session = db.get_session()
-    logs = []
-
-    try:
-        logs.append("🔄 Starting push operation...")
-
-        stats = sync_engine.push_all_dirty(session)
-
-        # Report results
-        if stats['candidates_pushed'] > 0:
-            logs.append(f"📤 Pushed {stats['candidates_pushed']} candidate(s)")
-        else:
-            logs.append("✓ No candidates to push")
-
-        if stats['tasks_pushed'] > 0:
-            logs.append(f"📤 Pushed {stats['tasks_pushed']} task(s)")
-        else:
-            logs.append("✓ No tasks to push")
-
-        if stats['candidates_failed'] > 0 or stats['tasks_failed'] > 0:
-            logs.append(f"⚠️  Failures: {stats['candidates_failed']} candidates, {stats['tasks_failed']} tasks")
-            for failed in stats['failed_items'][:3]:  # Show first 3 failures
-                logs.append(f"  ✗ {failed['type']} {failed['id']}: {failed['error']}")
-
-        logs.append("✅ Push complete")
-        return jsonify({"success": True, "logs": logs})
-
-    except Exception as e:
-        logs.append(f"❌ Push failed: {str(e)}")
-        return jsonify({"success": False, "logs": logs}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/sync/pull', methods=['POST'])
-def sync_pull():
-    """Pull changes from server"""
-    session = db.get_session()
-    logs = []
-
-    try:
-        logs.append("🔄 Starting pull operation...")
-
-        last_sync = config.last_sync
-        if last_sync:
-            since = datetime.fromisoformat(last_sync)
-            logs.append(f"📥 Pulling changes since {since.strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            since = None
-            logs.append("📥 Performing initial pull (all data)")
-
-        sync_timestamp, stats = sync_engine.pull_all(session, since=since)
-        config.last_sync = sync_timestamp
-
-        logs.append("")
-        # Report candidates
-        if stats['candidates_new'] > 0 or stats['candidates_updated'] > 0:
-            logs.append(f"👤 Candidates: {stats['candidates_new']} new, {stats['candidates_updated']} updated")
-            for cid in stats['candidates_list'][:5]:  # Show first 5
-                logs.append(f"  • {cid}")
-            if len(stats['candidates_list']) > 5:
-                logs.append(f"  ... and {len(stats['candidates_list']) - 5} more")
-        else:
-            logs.append("✓ No candidate changes")
-
-        # Report fields
-        if stats['fields_updated'] > 0:
-            logs.append(f"📝 Fields: {stats['fields_updated']} updated")
-            for cid, fields in list(stats['fields_by_candidate'].items())[:3]:  # Show first 3
-                logs.append(f"  • {cid}: {', '.join(fields)}")
-            if len(stats['fields_by_candidate']) > 3:
-                logs.append(f"  ... and {len(stats['fields_by_candidate']) - 3} more candidates")
-        else:
-            logs.append("✓ No field changes")
-
-        # Report tasks
-        if stats['tasks_new'] > 0 or stats['tasks_updated'] > 0:
-            logs.append(f"✅ Tasks: {stats['tasks_new']} new, {stats['tasks_updated']} updated")
-            for task in stats['tasks_list'][:5]:  # Show first 5
-                logs.append(f"  • {task}")
-            if len(stats['tasks_list']) > 5:
-                logs.append(f"  ... and {len(stats['tasks_list']) - 5} more")
-        else:
-            logs.append("✓ No task changes")
-
-        # Report action states
-        if stats['action_states_new'] > 0 or stats['action_states_updated'] > 0:
-            logs.append(f"⚙️  Action states: {stats['action_states_new']} new, {stats['action_states_updated']} updated")
-        else:
-            logs.append("✓ No action state changes")
-
-        logs.append("")
-        logs.append(f"✅ Pull complete at {sync_timestamp}")
-        return jsonify({"success": True, "logs": logs})
-
-    except Exception as e:
-        logs.append(f"❌ Pull failed: {str(e)}")
-        return jsonify({"success": False, "logs": logs}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/sync/full', methods=['POST'])
-def sync_full():
-    """Full sync: pull first (to get latest versions), then push"""
-    session = db.get_session()
-    logs = []
-
-    try:
-        logs.append("🔄 Starting full sync...")
-        logs.append("")
-
-        last_sync = config.last_sync
-        if last_sync:
-            since = datetime.fromisoformat(last_sync)
-            logs.append(f"Syncing changes since {since.strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            since = datetime(2000, 1, 1)
-            logs.append("Performing initial sync...")
-
-        # Full sync: pull first (to get latest versions), then push
-        result = sync_engine.full_sync(session, since=since)
-
-        # Report results
-        push_stats = result['push']
-        pull_stats = result['pull']
-
-        logs.append("")
-        logs.append("=== PULL PHASE ===")
-        if pull_stats['candidates_new'] > 0 or pull_stats['candidates_updated'] > 0:
-            logs.append(f"📥 Pulled: {pull_stats['candidates_new']} new, {pull_stats['candidates_updated']} updated candidates")
-        else:
-            logs.append("✓ No candidate changes")
-
-        if pull_stats['fields_updated'] > 0:
-            logs.append(f"📝 Updated {pull_stats['fields_updated']} fields")
-        else:
-            logs.append("✓ No field changes")
-
-        if pull_stats['tasks_new'] > 0 or pull_stats['tasks_updated'] > 0:
-            logs.append(f"✅ Pulled: {pull_stats['tasks_new']} new, {pull_stats['tasks_updated']} updated tasks")
-        else:
-            logs.append("✓ No task changes")
-
-        if pull_stats['action_states_new'] > 0 or pull_stats['action_states_updated'] > 0:
-            logs.append(f"⚙️  Pulled: {pull_stats['action_states_new']} new, {pull_stats['action_states_updated']} updated action states")
-
-        logs.append("")
-        logs.append("=== PUSH PHASE ===")
-        if push_stats['candidates_pushed'] > 0 or push_stats['tasks_pushed'] > 0:
-            logs.append(f"📤 Pushed: {push_stats['candidates_pushed']} candidates, {push_stats['tasks_pushed']} tasks")
-        else:
-            logs.append("✓ Nothing to push")
-
-        if push_stats['candidates_failed'] > 0 or push_stats['tasks_failed'] > 0:
-            logs.append(f"⚠️  Failures: {push_stats['candidates_failed']} candidates, {push_stats['tasks_failed']} tasks")
-            for failed in push_stats['failed_items'][:3]:  # Show first 3 failures
-                logs.append(f"  ✗ {failed['type']} {failed['id']}: {failed['error']}")
-
-        config.last_sync = result['sync_timestamp']
-        logs.append("")
-        logs.append(f"✅ Full sync complete at {result['sync_timestamp']}")
-        return jsonify({"success": True, "logs": logs})
-
-    except Exception as e:
-        logs.append(f"❌ Sync failed: {str(e)}")
-        return jsonify({"success": False, "logs": logs}), 500
-    finally:
-        session.close()
-
-
-@app.route('/api/sync/reset', methods=['POST'])
-def sync_reset():
-    """NUCLEAR RESET: Delete all local data and re-download from server"""
-    session = db.get_session()
-    logs = []
-
-    try:
-        logs.append("☢️  NUCLEAR RESET - DELETING ALL LOCAL DATA")
-        logs.append("This will DELETE everything and re-download from server")
-        logs.append("")
-
-        # Count before deletion
-        before_candidates = session.query(models.Candidate).count()
-        before_tasks = session.query(models.CandidateTask).count()
-        before_action_states = session.query(models.ActionState).count()
-
-        logs.append(f"📊 Before: {before_candidates} candidates, {before_tasks} tasks, {before_action_states} action states")
-        logs.append("")
-
-        # DELETE ALL DATA
-        logs.append("🗑️  Deleting all local data...")
-        session.query(models.ActionState).delete()
-        logs.append("  ✓ Deleted action states")
-        session.query(models.CandidateTask).delete()
-        logs.append("  ✓ Deleted tasks")
-        session.query(models.Candidate).delete()
-        logs.append("  ✓ Deleted candidates")
-        session.commit()
-        logs.append("")
-
-        # Pull everything from server
-        logs.append("📥 Downloading ALL data from server...")
-        sync_timestamp, stats = sync_engine.pull_candidates(session, since=None)
-        config.last_sync = sync_timestamp
-
-        logs.append("")
-        logs.append(f"✅ Reset complete!")
-        logs.append(f"👤 Downloaded {stats['candidates_new']} candidates")
-        logs.append(f"📝 Downloaded {stats['fields_updated']} field values")
-        logs.append(f"✅ Downloaded {stats['tasks_new']} tasks")
-        logs.append(f"⚙️  Downloaded {stats['action_states_new'] + stats['action_states_updated']} action states")
-        logs.append(f"  • Sync timestamp: {sync_timestamp}")
-        logs.append("")
-        logs.append("☢️  Local database is now a clean copy of server")
-
-        return jsonify({"success": True, "logs": logs})
-
-    except Exception as e:
-        session.rollback()
-        logs.append(f"❌ Reset failed: {str(e)}")
-        return jsonify({"success": False, "logs": logs}), 500
-    finally:
-        session.close()
-
-
 if __name__ == '__main__':
     print("=" * 60)
     print("Hiring Process Management - Web Interface")
     print("=" * 60)
-    print(f"Server URL: {config.server_url}")
-    print(f"Database: {config.db_file}")
+    print(f"Database: {db_file}")
     print("=" * 60)
     print(f"\nStarting web server on http://localhost:{args.port}")
     print("Press Ctrl+C to stop\n")

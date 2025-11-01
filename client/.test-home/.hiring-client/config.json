@@ -1,5 +1,0 @@
-{
-  "encryption_key": "test-key-123",
-  "server_url": "http://localhost:8000/api",
-  "schema_version": 1
-}
