@@ -1,0 +1,81 @@
+id: senior_engineer_v2
+name: Senior Engineer
+description: Workflow for hiring senior engineers with complex evaluation paths
+
+tasks:
+  - identifier: resume_review_v1
+    name: Review Resume
+    description: Initial resume screening
+    dependencies: []
+
+  - identifier: phone_screen_v1
+    name: Phone Screen
+    description: Initial phone conversation
+    dependencies:
+      - resume_review_v1
+
+  - identifier: reference_check_v1
+    name: Reference Check
+    description: Call references early in process
+    dependencies:
+      - phone_screen_v1
+
+  - identifier: coding_challenge_v1
+    name: Coding Challenge
+    description: Take-home coding assignment
+    dependencies:
+      - phone_screen_v1
+
+  - identifier: code_review_v1
+    name: Code Review
+    description: Review submitted code
+    dependencies:
+      - phone_screen_v1
+
+  - identifier: system_design_v1
+    name: System Design Interview
+    description: Architecture discussion
+    dependencies:
+      - coding_challenge_v1
+      - code_review_v1
+
+  - identifier: leadership_interview_v1
+    name: Leadership Interview
+    description: Assess leadership capabilities
+    dependencies:
+      - coding_challenge_v1
+      - reference_check_v1
+
+  - identifier: technical_deep_dive_v1
+    name: Technical Deep Dive
+    description: In-depth technical discussion
+    dependencies:
+      - system_design_v1
+      - leadership_interview_v1
+      - code_review_v1
+
+  - identifier: team_fit_interview_v1
+    name: Team Fit Interview
+    description: Meet with team members
+    dependencies:
+      - leadership_interview_v1
+
+  - identifier: director_interview_v1
+    name: Director Interview
+    description: Interview with director
+    dependencies:
+      - technical_deep_dive_v1
+      - team_fit_interview_v1
+      - reference_check_v1
+
+  - identifier: make_offer_v1
+    name: Make Offer
+    description: Prepare and send offer
+    dependencies:
+      - director_interview_v1
+
+  - identifier: offer_accepted_v1
+    name: Offer Accepted
+    description: Candidate accepted offer
+    dependencies:
+      - make_offer_v1

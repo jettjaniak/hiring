@@ -12,7 +12,7 @@ import models
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Hiring Process Web Client')
-parser.add_argument('--data-dir', default=None, help='Data directory for client files (default: ~/.hiring-client)')
+parser.add_argument('--data-dir', default=None, help='Data directory for client files (default: ~/.hiring-app)')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
 args = parser.parse_args()
 
@@ -21,7 +21,7 @@ app.secret_key = 'hiring-process-demo-secret'
 
 # Initialize database
 import os
-data_dir = args.data_dir or os.path.expanduser('~/.hiring-client')
+data_dir = args.data_dir or os.path.expanduser('~/.hiring-app')
 os.makedirs(data_dir, exist_ok=True)
 db_file = os.path.join(data_dir, 'hiring.db')
 
