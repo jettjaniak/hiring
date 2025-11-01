@@ -4,126 +4,135 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hiring process management and automation tool with end-to-end encryption. Backend serves as encrypted data storage and sync service between clients. Client-side encryption ensures candidate data is secure even with full database access.
+Simple, local-first hiring process management tool with web interface. No encryption, no sync, just straightforward candidate tracking with workflow visualization.
 
 ## Architecture
 
-**Backend (Python/FastAPI)**: Stores encrypted blobs and handles sync with optimistic locking
-**Client (Python CLI)**: Terminal interface for managing candidates, handles encryption/decryption, syncs with server
+**Single FastAPI Application**: Web interface with truly auto-generated REST APIs powered by FastAPI + SQLModel. **Adding a field to a model automatically exposes it in the API.**
 
 ### Data Model
 
-- **Candidate**: Metadata container (id, workflow_id). One workflow per candidate.
-- **CandidateField**: Stores encrypted candidate data with field-level versioning for granular conflict detection
-- **CandidateTask**: Links candidate to workflow tasks. Tracks completion state with strict versioning.
-- **ActionState**: Per-candidate state for Actions (mini-apps that help complete tasks)
+- **Candidate**: Basic candidate information (name, email, phone, resume URL, notes). Linked to a workflow.
+- **CandidateTask**: Links candidate to workflow tasks. Tracks completion status (not_started, in_progress, completed, na).
+- **ActionState**: Per-candidate state for Actions (mini-apps that help complete tasks). Stores JSON data.
 
 ### Key Concepts
 
-**Workflows**: Define DAG of Tasks with dependencies (stored as JSON/YAML, bundled with app)
+**Workflows**: Define DAG of Tasks with dependencies (stored as YAML in `workflows/` directory)
 **Tasks**: Have identifier, name, dependencies. Same task can appear in multiple workflows.
 **Actions**: Reusable mini-apps (HTML+JS) that can complete multiple tasks. Maintain per-candidate state.
 
-### Conflict Resolution
-
-- **CandidateTask**: Strict version locking - no concurrent edits allowed
-- **CandidateField**: Field-level versions - different fields can be edited concurrently
-- **ActionState**: Strict version locking
-
 ## Development Commands
 
-### Server Setup
+### Setup
+
 ```bash
-cd server
 python3.12 -m venv venv
 ./venv/bin/pip install -r requirements.txt
 ```
 
-### Run Server
-```bash
-cd server
-./venv/bin/python run.py
-```
-Server starts on `http://localhost:8000`. API docs at `http://localhost:8000/docs`
+### Run Application
 
-### Test Server API
 ```bash
-cd server
-./venv/bin/python test_api.py
+./venv/bin/python app.py
+# Or specify custom port and data directory:
+./venv/bin/python app.py --port 8080 --data-dir /path/to/data
 ```
 
-### Client Setup
-```bash
-cd client
-python3.12 -m venv venv
-./venv/bin/pip install -r requirements.txt
-```
+Server starts on `http://localhost:5001` by default.
+- **Web Interface**: `http://localhost:5001/`
+- **API Documentation**: `http://localhost:5001/api/docs` (Swagger UI)
 
-### Initialize Client (First Time)
-```bash
-cd client
-./venv/bin/python cli.py init
-# Enter encryption key when prompted
-# Use same key across all team members
-```
+## REST API
 
-### Client Commands
-```bash
-cd client
-./venv/bin/python cli.py status              # Show client status
-./venv/bin/python cli.py add-candidate       # Add new candidate
-./venv/bin/python cli.py list-candidates     # List all candidates
-./venv/bin/python cli.py show-candidate <id> # Show candidate details
-./venv/bin/python cli.py update-candidate <id> --name "..." --email "..."
-./venv/bin/python cli.py complete-task <cid> <task_id>
-./venv/bin/python cli.py sync                # Sync with server
-./venv/bin/python cli.py migrate             # Run schema migrations
-./venv/bin/python cli.py rotate-key          # Rotate encryption key
-```
+Auto-generated REST API with full Swagger/OpenAPI documentation at `/api/docs`.
 
-### Test Client
-```bash
-cd client
-./venv/bin/python test_demo.py  # Run full demo (requires server running)
-```
+### Candidate Endpoints
 
-## API Architecture
+- `GET /api/candidates` - List all candidates
+- `POST /api/candidates` - Create new candidate
+- `GET /api/candidates/{id}` - Get candidate by ID
+- `PUT /api/candidates/{id}` - Update candidate
+- `DELETE /api/candidates/{id}` - Soft delete candidate
 
-All sensitive data stored as encrypted blobs (bytes). Server never sees plaintext candidate data.
+### Task Endpoints
 
-**Sync model**: Client polls `/api/sync?since={timestamp}` to get all changes, merges locally.
+- `GET /api/candidates/{id}/tasks` - List candidate tasks
+- `GET /api/candidates/{id}/tasks/{task_id}` - Get specific task
+- `PUT /api/candidates/{id}/tasks/{task_id}` - Update/create task (upsert)
+- `DELETE /api/candidates/{id}/tasks/{task_id}` - Delete task
 
-**Version conflicts**: Return 409 with details. Client must fetch latest, re-encrypt, retry.
+### Action State Endpoints
+
+- `GET /api/action-states` - List all action states
+- `GET /api/action-states/{candidate_id}/{action_id}` - Get action state
+- `PUT /api/action-states/{candidate_id}/{action_id}` - Update/create action state
+- `DELETE /api/action-states/{candidate_id}/{action_id}` - Delete action state
 
 ## Project Structure
 
 ```
-server/
-  ├── main.py          # FastAPI app and endpoints
-  ├── models.py        # SQLAlchemy database models
-  ├── schemas.py       # Pydantic request/response schemas
-  ├── crud.py          # Database operations with version checking
-  ├── database.py      # Database connection and initialization
-  ├── run.py           # Server startup script
-  └── test_api.py      # API test examples
-
-client/
-  ├── cli.py           # Command-line interface
-  ├── config.py        # Configuration management
-  ├── database.py      # Local database setup
-  ├── models.py        # Local data models (decrypted)
-  ├── encryption.py    # Encryption/decryption utilities
-  ├── sync.py          # Server synchronization engine
-  ├── migrations.py    # Schema migrations and key rotation
-  └── test_demo.py     # Demo test script
+hiring/
+  ├── app.py               # FastAPI application with auto-generated REST API and HTML views
+  ├── models.py            # SQLModel data models (combines SQLAlchemy + Pydantic)
+  ├── database.py          # Database setup and session management
+  ├── workflow_loader.py   # Loads workflow definitions from YAML
+  ├── requirements.txt     # Python dependencies
+  ├── README.md            # User documentation
+  ├── CLAUDE.md            # Developer documentation (this file)
+  ├── templates/           # HTML templates for web interface
+  │   ├── base.html
+  │   ├── index.html
+  │   ├── table_view.html
+  │   ├── workflow_view.html
+  │   ├── view.html
+  │   ├── add.html
+  │   ├── edit.html
+  │   └── task_controls.html
+  └── workflows/           # YAML workflow definition files
+      ├── senior_engineer_v2.yaml
+      └── tech_specialist_v1.yaml
 ```
 
-## Client Features
+## Features
 
-- **E2EE**: All candidate data encrypted client-side with Fernet (symmetric encryption)
-- **Local Storage**: SQLite database at `~/.hiring-client/local.db` stores decrypted data
-- **Sync**: Pulls changes from server, decrypts; pushes local changes, encrypts
-- **Conflict Detection**: Optimistic locking with version numbers
-- **Schema Migrations**: Add new fields to candidate schema, migrate local and server data
-- **Key Rotation**: Change encryption key, re-encrypt all data on server
-- **Extensible**: Designed to be wrapped in HTTP server + web frontend later
+- **Local Storage**: SQLite database at `~/.hiring-client/hiring.db` (or custom location via `--data-dir`)
+- **Web Interface**: Full-featured UI for managing candidates and tracking workflow progress
+- **REST API**: Auto-generated CRUD API with Swagger documentation
+- **Workflow Visualization**: DAG view showing task dependencies and progress
+- **Table View**: Grid view of all candidates and their task statuses
+- **Soft Delete**: Candidates marked as deleted but not removed from database
+- **No External Dependencies**: No server, no sync, no encryption - just simple local data management
+
+## Technology Stack
+
+- **FastAPI** (0.115.5) - Modern async web framework with automatic OpenAPI/Swagger generation
+- **SQLModel** (0.0.22) - Combines SQLAlchemy + Pydantic for type-safe, auto-validating models
+- **Uvicorn** (0.32.1) - ASGI server for running FastAPI
+- **PyYAML** (6.0.1) - Workflow definition parsing
+- **SQLite** - Local database (built-in with Python)
+
+**Why FastAPI + SQLModel?**
+
+This stack enables truly auto-generated APIs:
+- Define models once with type hints (e.g., `name: Optional[str] = None`)
+- Add a field → automatically appears in ALL API endpoints
+- Automatic validation via Pydantic
+- Free Swagger docs from OpenAPI schema
+- Zero manual serialization code
+
+## Best Practices
+
+When extending this application:
+
+1. **Models**: Add fields to models in `models.py` using type hints. They automatically appear in the API! Example:
+   ```python
+   class Candidate(SQLModel, table=True):
+       new_field: Optional[str] = None  # Automatically in API!
+   ```
+2. **Workflows**: Create new workflows as YAML files in `workflows/` directory
+3. **HTML Templates**: Extend `base.html` for consistent styling
+4. **API Endpoints**: Use FastAPI's dependency injection and response_model for type-safe endpoints
+5. **Database Changes**: Update model definitions and recreate the database (or write migrations if needed)
+
+**Key Advantage**: With SQLModel, you define each field once with its type. No manual serialization, no separate API schemas, no manual validation. It just works.

@@ -148,15 +148,8 @@
     </header>
 
     <div class="content">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash {{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
         {% block content %}{% endblock %}
     </div>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
