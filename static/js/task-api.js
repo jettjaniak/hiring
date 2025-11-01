@@ -1,6 +1,47 @@
 // Task API Functions
 
 /**
+ * Save scroll positions before reload
+ */
+function saveScrollPosition() {
+    // Save window scroll
+    sessionStorage.setItem('scrollY', window.scrollY.toString());
+    sessionStorage.setItem('scrollX', window.scrollX.toString());
+
+    // Save table wrapper scroll if it exists (for table view)
+    const tableWrapper = document.querySelector('.table-wrapper');
+    if (tableWrapper) {
+        sessionStorage.setItem('tableScrollLeft', tableWrapper.scrollLeft.toString());
+        sessionStorage.setItem('tableScrollTop', tableWrapper.scrollTop.toString());
+    }
+}
+
+/**
+ * Restore scroll positions after page load
+ */
+function restoreScrollPosition() {
+    // Restore window scroll
+    const scrollY = sessionStorage.getItem('scrollY');
+    const scrollX = sessionStorage.getItem('scrollX');
+    if (scrollY !== null && scrollX !== null) {
+        window.scrollTo(parseInt(scrollX), parseInt(scrollY));
+        sessionStorage.removeItem('scrollY');
+        sessionStorage.removeItem('scrollX');
+    }
+
+    // Restore table wrapper scroll if it exists
+    const tableWrapper = document.querySelector('.table-wrapper');
+    const tableScrollLeft = sessionStorage.getItem('tableScrollLeft');
+    const tableScrollTop = sessionStorage.getItem('tableScrollTop');
+    if (tableWrapper && tableScrollLeft !== null && tableScrollTop !== null) {
+        tableWrapper.scrollLeft = parseInt(tableScrollLeft);
+        tableWrapper.scrollTop = parseInt(tableScrollTop);
+        sessionStorage.removeItem('tableScrollLeft');
+        sessionStorage.removeItem('tableScrollTop');
+    }
+}
+
+/**
  * Create a task
  */
 async function createTask(candidateId, taskIdentifier) {
@@ -13,6 +54,7 @@ async function createTask(candidateId, taskIdentifier) {
         });
 
         if (response.ok) {
+            saveScrollPosition();
             location.reload();
         } else {
             const data = await response.json();
@@ -40,6 +82,7 @@ async function updateTaskStatus(candidateId, taskIdentifier, select) {
         });
 
         if (response.ok) {
+            saveScrollPosition();
             location.reload();
         } else {
             const data = await response.json();

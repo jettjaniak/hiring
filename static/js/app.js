@@ -15,4 +15,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('dag-container')) {
         layoutDAG();
     }
+
+    // Restore scroll position if saved from previous page
+    restoreScrollPosition();
 });
