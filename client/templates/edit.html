@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ candidate.name }} - Hiring Process Management{% endblock %}
+
+{% block content %}
+<h2>Edit Candidate</h2>
+
+<form method="POST">
+    <div class="form-group">
+        <label for="workflow_id">Workflow <span class="required">*</span></label>
+        <select id="workflow_id" name="workflow_id" required>
+            {% for workflow_id, workflow in workflows.items() %}
+            <option value="{{ workflow_id }}" {% if workflow_id == candidate.workflow_id %}selected{% endif %}>
+                {{ workflow.name }} ({{ workflow_id }})
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ candidate.name or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ candidate.email or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ candidate.phone or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="resume_url">Resume URL</label>
+        <input type="text" id="resume_url" name="resume_url" value="{{ candidate.resume_url or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes">{{ candidate.notes or '' }}</textarea>
+    </div>
+
+    <div>
+        <button type="submit" class="btn">Save Changes</button>
+        <a href="/candidate/{{ candidate.id }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+{% endblock %}

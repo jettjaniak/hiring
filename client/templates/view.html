@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}{{ candidate.name }} - Hiring Process Management{% endblock %}
+
+{% block content %}
+<h2>{{ candidate.name or 'Candidate Details' }}</h2>
+
+<div class="info-section">
+    <h3>Personal Information</h3>
+    <div class="info-item">
+        <strong>ID:</strong> {{ candidate.id }}
+    </div>
+    <div class="info-item">
+        <strong>Name:</strong> {{ candidate.name or '(Not set)' }}
+    </div>
+    <div class="info-item">
+        <strong>Email:</strong> {{ candidate.email or '(Not set)' }}
+    </div>
+    <div class="info-item">
+        <strong>Phone:</strong> {{ candidate.phone or '(Not set)' }}
+    </div>
+    <div class="info-item">
+        <strong>Resume URL:</strong> {{ candidate.resume_url or '(Not set)' }}
+    </div>
+    <div class="info-item">
+        <strong>Workflow:</strong> {{ candidate.workflow_id }}
+    </div>
+</div>
+
+<div class="info-section">
+    <h3>Notes</h3>
+    <p>{{ candidate.notes or '(No notes)' }}</p>
+</div>
+
+<div style="margin-top: 20px;">
+    <a href="/candidate/{{ candidate.id }}/workflow" class="btn">View Workflow</a>
+    <a href="/candidate/{{ candidate.id }}/edit" class="btn">Edit</a>
+    <form method="POST" action="/candidate/{{ candidate.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this candidate?');">
+        <button type="submit" class="btn btn-danger">Delete</button>
+    </form>
+    <a href="/" class="btn btn-secondary">Back to List</a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Candidates - Hiring Process Management{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2>Candidates</h2>
+    <a href="/table" class="btn btn-secondary">Table View</a>
+</div>
+
+{% if candidates %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Workflow</th>
+            <th>Phone</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for candidate in candidates %}
+        <tr>
+            <td>{{ candidate.name or '(No name)' }}</td>
+            <td>{{ candidate.email or '' }}</td>
+            <td>{{ candidate.workflow_id }}</td>
+            <td>{{ candidate.phone or '' }}</td>
+            <td>
+                <a href="/candidate/{{ candidate.id }}/workflow" class="btn">Workflow</a>
+                <a href="/candidate/{{ candidate.id }}" class="btn btn-secondary">Details</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No candidates yet. <a href="/candidate/add">Add your first candidate</a></p>
+{% endif %}
+
+{% endblock %}
