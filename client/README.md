@@ -1,6 +1,6 @@
-# Hiring Process Client
+# Hiring Process Manager
 
-Python CLI client for the hiring process management tool. Handles encryption/decryption, local storage, and sync with the server.
+A simple web-based tool for managing candidates through hiring workflows. Built with Flask and SQLite.
 
 ## Setup
 
@@ -12,128 +12,86 @@ python3.12 -m venv venv
 
 ## Usage
 
-### Initialize Client
+### Run the Web Interface
 
-First time setup (option 1 - direct key):
+Start the web server:
 ```bash
-./venv/bin/python cli.py init --key "your-password-here"
+./venv/bin/python web.py
 ```
 
-Or (option 2 - interactive prompt):
+The server will start on http://localhost:5001 by default.
+
+You can customize the port and data directory:
 ```bash
-./venv/bin/python cli.py init
-# You'll be prompted for encryption key
+./venv/bin/python web.py --port 8080 --data-dir /path/to/data
 ```
 
-Note: Server URL defaults to http://localhost:8000/api
+### Web Interface Features
 
-### Commands
+- **View all candidates**: Navigate to `/` to see a list of all candidates
+- **Table view**: Navigate to `/table` to see all candidates and their task statuses in a grid
+- **Add candidate**: Click "Add Candidate" to create a new candidate record
+- **View candidate details**: Click on a candidate to see their information and task progress
+- **Edit candidate**: Edit candidate information from the detail view
+- **Workflow view**: Visualize candidate progress through their hiring workflow as a DAG
+- **Update task status**: Click on tasks to change their status (not started, in progress, completed, n/a)
+- **Soft delete**: Delete candidates (they're marked as deleted but not removed from database)
 
-**Check Status**
-```bash
-./venv/bin/python cli.py status
-```
+## Data Storage
 
-**Add a Candidate**
-```bash
-./venv/bin/python cli.py add-candidate
-```
+- Database: SQLite database stored at `~/.hiring-client/hiring.db` (or custom location via `--data-dir`)
+- No encryption, no sync, just local storage
+- All data is stored in plaintext in the local database
 
-**List Candidates**
-```bash
-./venv/bin/python cli.py list-candidates
-./venv/bin/python cli.py list-candidates --workflow tech_specialist_v1
-```
+## Workflows
 
-**Show Candidate Details**
-```bash
-./venv/bin/python cli.py show-candidate candidate-001
-```
+Workflows are defined in YAML files in the `workflows/` directory. Each workflow defines:
+- A list of tasks that can be assigned to candidates
+- Dependencies between tasks (which tasks must be completed before others)
 
-**Update Candidate**
-```bash
-./venv/bin/python cli.py update-candidate candidate-001 --name "John Doe" --email "john@example.com"
-```
-
-**Complete a Task**
-```bash
-./venv/bin/python cli.py complete-task candidate-001 initial_screening_v1
-```
-
-**Sync with Server**
-```bash
-./venv/bin/python cli.py sync
-```
-
-**Run Migrations**
-```bash
-./venv/bin/python cli.py migrate
-```
-
-**Rotate Encryption Key**
-```bash
-./venv/bin/python cli.py rotate-key
-```
-
-## How It Works
-
-### Encryption
-- All sensitive candidate data is encrypted before sending to server
-- Uses Fernet symmetric encryption with key derived from passphrase
-- Server only stores encrypted blobs, never sees plaintext data
-
-### Local Storage
-- SQLite database stores decrypted data locally
-- Located at `~/.hiring-client/local.db`
-- Configuration at `~/.hiring-client/config.json`
-
-### Sync
-- Pulls changes from server since last sync
-- Decrypts incoming data
-- Encrypts outgoing changes
-- Handles version conflicts with optimistic locking
-
-### Schema Migrations
-- Supports adding new fields to candidate schema
-- Migrates both local and server data
-- Version tracking ensures migrations run in order
-
-### Key Rotation
-- Allows changing encryption key
-- Re-encrypts all data with new key
-- Pushes updated encrypted data to server
-- **Important**: Coordinate with team before rotating keys
+The web interface uses these workflow definitions to:
+- Show available workflows when adding candidates
+- Display task progress in the workflow view
+- Render task dependencies as a directed acyclic graph (DAG)
 
 ## Architecture
 
 ```
-cli.py          - Command-line interface
-config.py       - Configuration management
-database.py     - Local database setup
-models.py       - Local data models (decrypted)
-encryption.py   - Encryption/decryption
-sync.py         - Server synchronization
-migrations.py   - Schema migrations and key rotation
+web.py           - Flask web application
+database.py      - Database setup and session management
+models.py        - SQLAlchemy data models (Candidate, CandidateTask, ActionState)
+workflow_loader.py - Loads workflow definitions from YAML files
+templates/       - HTML templates for the web interface
+workflows/       - YAML workflow definition files
 ```
 
-## Security Notes
+## Models
 
-1. **Encryption key** is stored in plaintext in `~/.hiring-client/config.json`
-   - Keep this file secure
-   - Don't commit it to version control
+### Candidate
+- Basic information: name, email, phone, resume URL, notes
+- Assigned to a workflow
+- Soft delete support (deleted flag + deleted_at timestamp)
+- Automatic timestamps (created_at, updated_at)
 
-2. **Local database** contains decrypted data
-   - Stored at `~/.hiring-client/local.db`
-   - Secure your local filesystem
+### CandidateTask
+- Links a candidate to a specific task in their workflow
+- Stores task status: not_started, in_progress, completed, or na
+- Automatic timestamps
 
-3. **Server** only has encrypted data
-   - Safe even if server is compromised
-   - But sync requires correct encryption key
+### ActionState
+- Stores arbitrary JSON state for workflow actions
+- Used to persist action-specific data between steps
 
-## Future Extensions
+## API Endpoints
 
-This client is designed to be extended into a web app:
-- Add HTTP server mode (e.g., Flask/FastAPI)
-- Build web frontend
-- Users run locally, access via browser
-- Same encryption and sync logic
+### Update Task Status
+```
+POST /api/candidate/<candidate_id>/task/<task_identifier>/update
+Content-Type: application/json
+
+{
+  "status": "completed"  // or "not_started", "in_progress", "na"
+}
+```
+
+Returns: `{"success": true, "status": "completed"}`
