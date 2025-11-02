@@ -6,6 +6,7 @@ import pytest
 import tempfile
 import shutil
 import os
+import yaml
 from pathlib import Path
 from fastapi.testclient import TestClient
 
@@ -59,7 +60,6 @@ class TestAPICandidates:
         assert data["name"] == "John Doe"
         assert data["email"] == "john@example.com"
         assert data["workflow_id"] == "senior_engineer_v2"
-        assert "id" in data  # ID should be auto-generated
 
     def test_list_candidates(self, test_app):
         """Test listing all candidates"""
@@ -88,10 +88,10 @@ class TestAPICandidates:
             "email": "bob@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Get the candidate
-        response = test_app.get(f"/api/candidates/{candidate_id}")
+        response = test_app.get(f"/api/candidates/{candidate_email}")
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Bob Smith"
@@ -106,10 +106,10 @@ class TestAPICandidates:
             "email": "alice@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Update the candidate
-        response = test_app.put(f"/api/candidates/{candidate_id}", params={
+        response = test_app.put(f"/api/candidates/{candidate_email}", params={
             "name": "Alice Johnson-Updated",
             "email": "alice.updated@example.com",
             "phone": "555-1234"
@@ -129,14 +129,14 @@ class TestAPICandidates:
             "email": "delete@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Delete the candidate
-        response = test_app.delete(f"/api/candidates/{candidate_id}")
+        response = test_app.delete(f"/api/candidates/{candidate_email}")
         assert response.status_code == 204
 
         # Verify it's deleted
-        response = test_app.get(f"/api/candidates/{candidate_id}")
+        response = test_app.get(f"/api/candidates/{candidate_email}")
         assert response.status_code == 404
 
 
@@ -152,11 +152,11 @@ class TestAPITasks:
             "workflow_id": "senior_engineer_v2"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Create a task
         response = test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/resume_screen",
+            f"/api/candidates/{candidate_email}/tasks/resume_screen",
             params={"status": "in_progress"}
         )
         assert response.status_code == 200
@@ -173,20 +173,20 @@ class TestAPITasks:
             "email": "multi@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Create tasks
         test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/task1",
+            f"/api/candidates/{candidate_email}/tasks/task1",
             params={"status": "completed"}
         )
         test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/task2",
+            f"/api/candidates/{candidate_email}/tasks/task2",
             params={"status": "not_started"}
         )
 
         # List tasks
-        response = test_app.get(f"/api/candidates/{candidate_id}/tasks")
+        response = test_app.get(f"/api/candidates/{candidate_email}/tasks")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
@@ -202,17 +202,17 @@ class TestAPITasks:
             "email": "status@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Create task
         test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/test_task",
+            f"/api/candidates/{candidate_email}/tasks/test_task",
             params={"status": "not_started"}
         )
 
         # Update status
         response = test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/test_task",
+            f"/api/candidates/{candidate_email}/tasks/test_task",
             params={"status": "completed"}
         )
         assert response.status_code == 200
@@ -228,20 +228,20 @@ class TestAPITasks:
             "email": "taskdel@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Create task
         test_app.put(
-            f"/api/candidates/{candidate_id}/tasks/delete_me",
+            f"/api/candidates/{candidate_email}/tasks/delete_me",
             params={"status": "not_started"}
         )
 
         # Delete task
-        response = test_app.delete(f"/api/candidates/{candidate_id}/tasks/delete_me")
+        response = test_app.delete(f"/api/candidates/{candidate_email}/tasks/delete_me")
         assert response.status_code == 204
 
         # Verify deleted
-        response = test_app.get(f"/api/candidates/{candidate_id}/tasks/delete_me")
+        response = test_app.get(f"/api/candidates/{candidate_email}/tasks/delete_me")
         assert response.status_code == 404
 
 
@@ -276,10 +276,10 @@ class TestWebViews:
             "workflow_id": "senior_engineer_v2"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # View candidate
-        response = test_app.get(f"/candidate/{candidate_id}")
+        response = test_app.get(f"/candidate/{candidate_email}")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert b"View Me" in response.content
@@ -293,10 +293,10 @@ class TestWebViews:
             "workflow_id": "senior_engineer_v2"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # View workflow
-        response = test_app.get(f"/candidate/{candidate_id}/workflow")
+        response = test_app.get(f"/candidate/{candidate_email}/workflow")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
@@ -324,10 +324,10 @@ class TestFormSubmissions:
             "email": "formupdate@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Update via form
-        response = test_app.post(f"/candidate/{candidate_id}/edit", data={
+        response = test_app.post(f"/candidate/{candidate_email}/edit", data={
             "workflow_id": "senior_engineer_v2",
             "name": "Form Updated",
             "email": "formupdated@example.com"
@@ -335,8 +335,8 @@ class TestFormSubmissions:
 
         assert response.status_code in [302, 303]
 
-        # Verify update
-        get_response = test_app.get(f"/api/candidates/{candidate_id}")
+        # Verify update (use new email since it changed)
+        get_response = test_app.get(f"/api/candidates/formupdated@example.com")
         assert get_response.json()["name"] == "Form Updated"
 
     def test_delete_candidate_form(self, test_app):
@@ -348,15 +348,154 @@ class TestFormSubmissions:
             "email": "formdelete@example.com"
         })
         assert create_response.status_code == 201
-        candidate_id = create_response.json()["id"]
+        candidate_email = create_response.json()["email"]
 
         # Delete via form
-        response = test_app.post(f"/candidate/{candidate_id}/delete", follow_redirects=False)
+        response = test_app.post(f"/candidate/{candidate_email}/delete", follow_redirects=False)
         assert response.status_code in [302, 303]
 
         # Verify deleted
-        get_response = test_app.get(f"/api/candidates/{candidate_id}")
+        get_response = test_app.get(f"/api/candidates/{candidate_email}")
         assert get_response.status_code == 404
+
+
+class TestWorkflowValidation:
+    """Test workflow validation with Task model"""
+
+    def test_workflow_loads_with_valid_tasks(self, test_app):
+        """Test that workflows load successfully when all tasks exist in database"""
+        # The test_app fixture creates a fresh database with tasks from migration
+        # Workflows should load without errors
+        response = test_app.get("/api/candidates")
+        assert response.status_code == 200
+
+    def test_workflow_validation_fails_with_undefined_task(self, test_app):
+        """Test that workflow loading skips workflows with undefined tasks"""
+        import sys
+        import tempfile
+
+        # Create a temporary directory for this test
+        test_dir = tempfile.mkdtemp()
+        workflows_dir = Path(test_dir) / "workflows"
+        workflows_dir.mkdir(parents=True)
+
+        # Create a workflow YAML with an undefined task
+        invalid_workflow = {
+            'id': 'invalid_workflow',
+            'name': 'Invalid Workflow',
+            'description': 'Workflow with undefined tasks',
+            'tasks': [
+                {
+                    'task_id': 'undefined_task_that_does_not_exist',
+                    'dependencies': []
+                }
+            ]
+        }
+
+        workflow_file = workflows_dir / "invalid.yaml"
+        with open(workflow_file, 'w') as f:
+            yaml.dump(invalid_workflow, f)
+
+        # Try to load workflows - invalid workflow should be skipped
+        try:
+            # Clear any cached imports
+            if 'src.workflow_loader' in sys.modules:
+                del sys.modules['src.workflow_loader']
+
+            from src.workflow_loader import WorkflowLoader
+            from src.database import Database
+
+            # Get database from test app
+            db_path = Path(test_dir) / "hiring.db"
+            db = Database(str(db_path))
+            db.init_db()
+
+            # Load workflows - invalid one should be skipped with error message printed
+            loader = WorkflowLoader(workflows_dir=str(workflows_dir), db=db)
+
+            # Verify the invalid workflow was NOT loaded
+            assert 'invalid_workflow' not in loader.workflows
+            assert loader.get_workflow('invalid_workflow') is None
+        finally:
+            # Cleanup
+            try:
+                shutil.rmtree(test_dir)
+            except:
+                pass
+
+    def test_workflow_with_all_valid_task_ids(self, test_app):
+        """Test that workflow validates successfully with all valid task_ids"""
+        import sys
+        import tempfile
+
+        # Create a temporary directory for this test
+        test_dir = tempfile.mkdtemp()
+        workflows_dir = Path(test_dir) / "workflows"
+        workflows_dir.mkdir(parents=True)
+
+        try:
+            # Create database and add test tasks
+            db_path = Path(test_dir) / "hiring.db"
+            from src.database import Database
+            from src.models import Task
+            from sqlmodel import Session
+
+            db = Database(str(db_path))
+            db.init_db()
+
+            # Add valid tasks to database
+            with db.get_session() as session:
+                task1 = Task(task_id="valid_task_1", name="Valid Task 1", description="Test task 1")
+                task2 = Task(task_id="valid_task_2", name="Valid Task 2", description="Test task 2")
+                session.add(task1)
+                session.add(task2)
+                session.commit()
+
+            # Create a workflow YAML with valid tasks
+            valid_workflow = {
+                'id': 'valid_workflow',
+                'name': 'Valid Workflow',
+                'description': 'Workflow with valid tasks',
+                'tasks': [
+                    {
+                        'task_id': 'valid_task_1',
+                        'dependencies': []
+                    },
+                    {
+                        'task_id': 'valid_task_2',
+                        'dependencies': ['valid_task_1']
+                    }
+                ]
+            }
+
+            workflow_file = workflows_dir / "valid.yaml"
+            with open(workflow_file, 'w') as f:
+                yaml.dump(valid_workflow, f)
+
+            # Clear any cached imports
+            if 'src.workflow_loader' in sys.modules:
+                del sys.modules['src.workflow_loader']
+
+            from src.workflow_loader import WorkflowLoader
+
+            # This should succeed
+            loader = WorkflowLoader(workflows_dir=str(workflows_dir), db=db)
+
+            # Verify workflow loaded
+            assert 'valid_workflow' in loader.workflows
+            workflow = loader.get_workflow('valid_workflow')
+            assert workflow is not None
+            assert len(workflow.tasks) == 2
+            assert workflow.tasks[0].identifier == 'valid_task_1'
+            assert workflow.tasks[1].identifier == 'valid_task_2'
+            assert workflow.tasks[1].dependencies == ['valid_task_1']
+
+        finally:
+            # Cleanup
+            try:
+                shutil.rmtree(test_dir)
+            except:
+                pass
 
 
 class TestAPIDocumentation:
