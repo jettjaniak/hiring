@@ -44,7 +44,8 @@ db = Database(db_file)
 db.init_db()
 
 # Load workflow definitions (from project root)
-workflow_loader = WorkflowLoader(workflows_dir=str(project_root / "workflows"))
+# Pass database to validate task references
+workflow_loader = WorkflowLoader(workflows_dir=str(project_root / "workflows"), db=db)
 
 # Initialize FastAPI
 app = FastAPI(
