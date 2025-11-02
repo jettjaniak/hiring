@@ -5,6 +5,7 @@ Tests all API endpoints and web views with a temporary database.
 import pytest
 import tempfile
 import shutil
+import os
 from pathlib import Path
 from fastapi.testclient import TestClient
 
@@ -12,20 +13,35 @@ from fastapi.testclient import TestClient
 @pytest.fixture(scope="function")
 def test_app():
     """Create a test app with a temporary database."""
-    # Create a temporary directory for test data
+    # Create a temporary directory for test data with proper permissions
     test_dir = tempfile.mkdtemp()
+    os.chmod(test_dir, 0o755)
 
     # Set up environment to use test database
     import sys
+    original_argv = sys.argv.copy()
     sys.argv = ['test', '--data-dir', test_dir, '--port', '5001']
+
+    # Clear any cached imports
+    if 'src.app' in sys.modules:
+        del sys.modules['src.app']
+    if 'src.database' in sys.modules:
+        del sys.modules['src.database']
 
     # Import app after setting up sys.argv
     from src.app import app
 
-    yield TestClient(app)
+    client = TestClient(app)
+    yield client
+
+    # Restore original argv
+    sys.argv = original_argv
 
     # Cleanup
-    shutil.rmtree(test_dir)
+    try:
+        shutil.rmtree(test_dir)
+    except:
+        pass
 
 
 class TestAPICandidates:
@@ -33,26 +49,27 @@ class TestAPICandidates:
 
     def test_create_candidate(self, test_app):
         """Test creating a new candidate"""
-        response = test_app.post("/api/candidates", json={
-            "id": "test-candidate-1",
+        response = test_app.post("/api/candidates", params={
             "name": "John Doe",
             "email": "john@example.com",
             "workflow_id": "senior_engineer_v2"
         })
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["name"] == "John Doe"
         assert data["email"] == "john@example.com"
         assert data["workflow_id"] == "senior_engineer_v2"
+        assert "id" in data  # ID should be auto-generated
 
     def test_list_candidates(self, test_app):
         """Test listing all candidates"""
         # Create a candidate first
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-2",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Jane Doe",
             "email": "jane@example.com"
         })
+        assert create_response.status_code == 201
 
         # List candidates
         response = test_app.get("/api/candidates")
@@ -65,14 +82,16 @@ class TestAPICandidates:
     def test_get_candidate(self, test_app):
         """Test getting a specific candidate"""
         # Create a candidate
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-3",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Bob Smith",
             "email": "bob@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Get the candidate
-        response = test_app.get("/api/candidates/test-candidate-3")
+        response = test_app.get(f"/api/candidates/{candidate_id}")
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "Bob Smith"
@@ -81,14 +100,16 @@ class TestAPICandidates:
     def test_update_candidate(self, test_app):
         """Test updating a candidate"""
         # Create a candidate
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-4",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Alice Johnson",
             "email": "alice@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Update the candidate
-        response = test_app.put("/api/candidates/test-candidate-4", json={
+        response = test_app.put(f"/api/candidates/{candidate_id}", params={
             "name": "Alice Johnson-Updated",
             "email": "alice.updated@example.com",
             "phone": "555-1234"
@@ -102,18 +123,20 @@ class TestAPICandidates:
     def test_delete_candidate(self, test_app):
         """Test deleting a candidate (hard delete)"""
         # Create a candidate
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-5",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Delete Me",
             "email": "delete@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Delete the candidate
-        response = test_app.delete("/api/candidates/test-candidate-5")
+        response = test_app.delete(f"/api/candidates/{candidate_id}")
         assert response.status_code == 204
 
         # Verify it's deleted
-        response = test_app.get("/api/candidates/test-candidate-5")
+        response = test_app.get(f"/api/candidates/{candidate_id}")
         assert response.status_code == 404
 
 
@@ -123,16 +146,17 @@ class TestAPITasks:
     def test_create_task(self, test_app):
         """Test creating a task for a candidate"""
         # Create a candidate first
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-6",
+        create_response = test_app.post("/api/candidates", params={
             "name": "Task Tester",
             "email": "task@example.com",
             "workflow_id": "senior_engineer_v2"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Create a task
         response = test_app.put(
-            "/api/candidates/test-candidate-6/tasks/resume_screen",
+            f"/api/candidates/{candidate_id}/tasks/resume_screen",
             params={"status": "in_progress"}
         )
         assert response.status_code == 200
@@ -142,23 +166,27 @@ class TestAPITasks:
 
     def test_list_tasks(self, test_app):
         """Test listing tasks for a candidate"""
-        # Create a candidate and task
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-7",
+        # Create a candidate
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Multi Task",
             "email": "multi@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
+
+        # Create tasks
         test_app.put(
-            "/api/candidates/test-candidate-7/tasks/task1",
+            f"/api/candidates/{candidate_id}/tasks/task1",
             params={"status": "completed"}
         )
         test_app.put(
-            "/api/candidates/test-candidate-7/tasks/task2",
+            f"/api/candidates/{candidate_id}/tasks/task2",
             params={"status": "not_started"}
         )
 
         # List tasks
-        response = test_app.get("/api/candidates/test-candidate-7/tasks")
+        response = test_app.get(f"/api/candidates/{candidate_id}/tasks")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
@@ -167,20 +195,24 @@ class TestAPITasks:
 
     def test_update_task_status(self, test_app):
         """Test updating a task status"""
-        # Create candidate and task
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-8",
+        # Create candidate
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Status Updater",
             "email": "status@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
+
+        # Create task
         test_app.put(
-            "/api/candidates/test-candidate-8/tasks/test_task",
+            f"/api/candidates/{candidate_id}/tasks/test_task",
             params={"status": "not_started"}
         )
 
         # Update status
         response = test_app.put(
-            "/api/candidates/test-candidate-8/tasks/test_task",
+            f"/api/candidates/{candidate_id}/tasks/test_task",
             params={"status": "completed"}
         )
         assert response.status_code == 200
@@ -189,23 +221,27 @@ class TestAPITasks:
 
     def test_delete_task(self, test_app):
         """Test deleting a task"""
-        # Create candidate and task
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-9",
+        # Create candidate
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Task Deleter",
             "email": "taskdel@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
+
+        # Create task
         test_app.put(
-            "/api/candidates/test-candidate-9/tasks/delete_me",
+            f"/api/candidates/{candidate_id}/tasks/delete_me",
             params={"status": "not_started"}
         )
 
         # Delete task
-        response = test_app.delete("/api/candidates/test-candidate-9/tasks/delete_me")
+        response = test_app.delete(f"/api/candidates/{candidate_id}/tasks/delete_me")
         assert response.status_code == 204
 
         # Verify deleted
-        response = test_app.get("/api/candidates/test-candidate-9/tasks/delete_me")
+        response = test_app.get(f"/api/candidates/{candidate_id}/tasks/delete_me")
         assert response.status_code == 404
 
 
@@ -234,15 +270,16 @@ class TestWebViews:
     def test_view_candidate_page(self, test_app):
         """Test viewing a candidate page"""
         # Create a candidate first
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-10",
+        create_response = test_app.post("/api/candidates", params={
             "name": "View Me",
             "email": "view@example.com",
             "workflow_id": "senior_engineer_v2"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # View candidate
-        response = test_app.get("/candidate/test-candidate-10")
+        response = test_app.get(f"/candidate/{candidate_id}")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert b"View Me" in response.content
@@ -250,15 +287,16 @@ class TestWebViews:
     def test_workflow_view_page(self, test_app):
         """Test workflow view page"""
         # Create a candidate
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-11",
+        create_response = test_app.post("/api/candidates", params={
             "name": "Workflow Viewer",
             "email": "workflow@example.com",
             "workflow_id": "senior_engineer_v2"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # View workflow
-        response = test_app.get("/candidate/test-candidate-11/workflow")
+        response = test_app.get(f"/candidate/{candidate_id}/workflow")
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
 
@@ -280,14 +318,17 @@ class TestFormSubmissions:
     def test_update_candidate_form(self, test_app):
         """Test updating a candidate via form"""
         # Create candidate first
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-12",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Form Update",
             "email": "formupdate@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Update via form
-        response = test_app.post("/candidate/test-candidate-12/edit", data={
+        response = test_app.post(f"/candidate/{candidate_id}/edit", data={
+            "workflow_id": "senior_engineer_v2",
             "name": "Form Updated",
             "email": "formupdated@example.com"
         }, follow_redirects=False)
@@ -295,24 +336,26 @@ class TestFormSubmissions:
         assert response.status_code in [302, 303]
 
         # Verify update
-        get_response = test_app.get("/api/candidates/test-candidate-12")
+        get_response = test_app.get(f"/api/candidates/{candidate_id}")
         assert get_response.json()["name"] == "Form Updated"
 
     def test_delete_candidate_form(self, test_app):
         """Test deleting a candidate via form"""
         # Create candidate
-        test_app.post("/api/candidates", json={
-            "id": "test-candidate-13",
+        create_response = test_app.post("/api/candidates", params={
+            "workflow_id": "senior_engineer_v2",
             "name": "Form Delete",
             "email": "formdelete@example.com"
         })
+        assert create_response.status_code == 201
+        candidate_id = create_response.json()["id"]
 
         # Delete via form
-        response = test_app.post("/candidate/test-candidate-13/delete", follow_redirects=False)
+        response = test_app.post(f"/candidate/{candidate_id}/delete", follow_redirects=False)
         assert response.status_code in [302, 303]
 
         # Verify deleted
-        get_response = test_app.get("/api/candidates/test-candidate-13")
+        get_response = test_app.get(f"/api/candidates/{candidate_id}")
         assert get_response.status_code == 404
 
 

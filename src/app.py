@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 import uuid
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
 from src.models import Candidate, CandidateTask, ActionState
@@ -133,7 +133,7 @@ def update_candidate(
     if notes is not None:
         candidate.notes = notes
 
-    candidate.updated_at = datetime.utcnow()
+    candidate.updated_at = datetime.now(timezone.utc)
     session.add(candidate)
     session.commit()
     session.refresh(candidate)
@@ -214,7 +214,7 @@ def update_candidate_task(
         session.add(task)
     else:
         task.status = status
-        task.updated_at = datetime.utcnow()
+        task.updated_at = datetime.now(timezone.utc)
         session.add(task)
 
     session.commit()
@@ -295,7 +295,7 @@ def update_action_state(
         session.add(action_state)
     else:
         action_state.state = state
-        action_state.updated_at = datetime.utcnow()
+        action_state.updated_at = datetime.now(timezone.utc)
         session.add(action_state)
 
     session.commit()
@@ -584,7 +584,7 @@ def edit_candidate(
     candidate.phone = phone
     candidate.resume_url = resume_url
     candidate.notes = notes
-    candidate.updated_at = datetime.utcnow()
+    candidate.updated_at = datetime.now(timezone.utc)
 
     session.add(candidate)
     session.commit()

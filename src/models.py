@@ -2,7 +2,7 @@
 Database models for local storage
 """
 from sqlmodel import SQLModel, Field, JSON, Column
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Text
 
@@ -22,8 +22,8 @@ class Candidate(SQLModel, table=True):
     notes: Optional[str] = Field(default=None, sa_column=Column(Text))
 
     # System timestamps
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class CandidateTask(SQLModel, table=True):
@@ -37,8 +37,8 @@ class CandidateTask(SQLModel, table=True):
     status: Optional[str] = None
 
     # System timestamps
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class ActionState(SQLModel, table=True):
@@ -52,5 +52,5 @@ class ActionState(SQLModel, table=True):
     state: Optional[dict] = Field(default_factory=dict, sa_type=JSON)
 
     # System timestamps
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
