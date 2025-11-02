@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Checklists{% endblock %}
+
+{% block content %}
+<div class="table-header">
+    <h2>Checklists</h2>
+    <div>
+        <a href="/" class="btn btn-secondary">Back to Candidates</a>
+        <a href="/checklists/add" class="btn">Add Checklist</a>
+    </div>
+</div>
+
+{% if checklists %}
+<div class="table-wrapper">
+    <table class="candidates-table">
+        <thead>
+            <tr>
+                <th style="width: 15%;">Checklist ID</th>
+                <th style="width: 20%;">Name</th>
+                <th style="width: 30%;">Description</th>
+                <th style="width: 20%;">Linked Task</th>
+                <th style="width: 15%;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for checklist in checklists %}
+            <tr>
+                <td><code>{{ checklist.id }}</code></td>
+                <td><strong>{{ checklist.name }}</strong></td>
+                <td>{{ checklist.description or '(No description)' }}</td>
+                <td>
+                    {% if checklist_tasks[checklist.id] %}
+                        <span style="display: inline-block; padding: 2px 6px; margin: 2px; background: #e0e0e0; border-radius: 3px; font-size: 0.9em;">
+                            {{ checklist_tasks[checklist.id].name }} <code style="font-size: 0.8em;">({{ checklist_tasks[checklist.id].task_id }})</code>
+                        </span>
+                    {% else %}
+                        <span style="color: #999;">No task linked</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/checklists/{{ checklist.id }}/edit" class="btn btn-small">Edit</a>
+                    <form action="/checklists/{{ checklist.id }}/delete" method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this checklist?');">
+                        <button type="submit" class="btn btn-small btn-danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p>No checklists yet. <a href="/checklists/add">Add your first checklist</a></p>
+{% endif %}
+
+{% endblock %}

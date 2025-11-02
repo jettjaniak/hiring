@@ -498,6 +498,551 @@ class TestWorkflowValidation:
                 pass
 
 
+class TestAPITaskDefinitions:
+    """Test Task API endpoints"""
+
+    def test_create_task(self, test_app):
+        """Test creating a new task"""
+        response = test_app.post("/api/tasks", params={
+            "task_id": "test_task_1",
+            "name": "Test Task 1",
+            "description": "This is a test task"
+        })
+        assert response.status_code == 201
+        data = response.json()
+        assert data["task_id"] == "test_task_1"
+        assert data["name"] == "Test Task 1"
+        assert data["description"] == "This is a test task"
+
+    def test_list_tasks(self, test_app):
+        """Test listing all tasks"""
+        # Create a task first
+        test_app.post("/api/tasks", params={
+            "task_id": "list_task",
+            "name": "List Task",
+            "description": "Task for listing"
+        })
+
+        # List tasks
+        response = test_app.get("/api/tasks")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        # Check that our task is in the list
+        task_ids = [t["task_id"] for t in data]
+        assert "list_task" in task_ids
+
+    def test_get_task(self, test_app):
+        """Test getting a specific task"""
+        # Create a task
+        test_app.post("/api/tasks", params={
+            "task_id": "get_task",
+            "name": "Get Task",
+            "description": "Task to get"
+        })
+
+        # Get the task
+        response = test_app.get("/api/tasks/get_task")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "get_task"
+        assert data["name"] == "Get Task"
+
+    def test_update_task(self, test_app):
+        """Test updating a task"""
+        # Create a task
+        test_app.post("/api/tasks", params={
+            "task_id": "update_task",
+            "name": "Original Name",
+            "description": "Original description"
+        })
+
+        # Update the task
+        response = test_app.put("/api/tasks/update_task", params={
+            "name": "Updated Name",
+            "description": "Updated description"
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == "update_task"
+        assert data["name"] == "Updated Name"
+        assert data["description"] == "Updated description"
+
+    def test_delete_task(self, test_app):
+        """Test deleting a task"""
+        # Create a task
+        test_app.post("/api/tasks", params={
+            "task_id": "delete_task",
+            "name": "Delete Task",
+            "description": "Task to delete"
+        })
+
+        # Delete the task
+        response = test_app.delete("/api/tasks/delete_task")
+        assert response.status_code == 204
+
+        # Verify it's deleted
+        response = test_app.get("/api/tasks/delete_task")
+        assert response.status_code == 404
+
+
+class TestTaskTemplateWebForms:
+    """Test task-template relationship via web forms"""
+
+    def test_create_task_with_templates(self, test_app):
+        """Test creating a task and linking it to email templates via web form"""
+        # Create some email templates first
+        test_app.post("/template/add", data={
+            "name": "Welcome Email",
+            "content": "Welcome to the team!"
+        }, follow_redirects=False)
+
+        test_app.post("/template/add", data={
+            "name": "Rejection Email",
+            "content": "Thank you for your interest"
+        }, follow_redirects=False)
+
+        # Get template IDs from the database
+        from src.database import Database
+        from src.models import EmailTemplate
+        from sqlmodel import select
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            templates = session.exec(select(EmailTemplate)).all()
+            template_ids = [t.id for t in templates]
+
+        # Create a task and link it to the first template
+        response = test_app.post("/tasks/add", data={
+            "task_id": "send_welcome",
+            "name": "Send Welcome Email",
+            "description": "Send welcome email to new candidate",
+            "template_ids": [template_ids[0]]  # Link to first template
+        }, follow_redirects=False)
+
+        assert response.status_code in [302, 303]
+
+        # Verify the link was created
+        from src.models import EmailTemplateTask
+        with db.get_session() as session:
+            link = session.exec(
+                select(EmailTemplateTask).where(
+                    EmailTemplateTask.task_id == "send_welcome",
+                    EmailTemplateTask.email_template_id == template_ids[0]
+                )
+            ).first()
+            assert link is not None
+
+    def test_edit_task_template_links(self, test_app):
+        """Test editing task to change linked templates"""
+        # Create a template
+        test_app.post("/template/add", data={
+            "name": "Interview Invite",
+            "content": "You're invited to interview"
+        }, follow_redirects=False)
+
+        # Create a task
+        test_app.post("/tasks/add", data={
+            "task_id": "schedule_interview",
+            "name": "Schedule Interview",
+            "description": "Send interview invitation"
+        }, follow_redirects=False)
+
+        # Get template ID
+        from src.database import Database
+        from src.models import EmailTemplate
+        from sqlmodel import select
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            template = session.exec(select(EmailTemplate).where(EmailTemplate.name == "Interview Invite")).first()
+            template_id = template.id
+
+        # Edit task to link the template
+        response = test_app.post("/tasks/schedule_interview/edit", data={
+            "task_id": "schedule_interview",
+            "name": "Schedule Interview",
+            "description": "Send interview invitation",
+            "template_ids": [template_id]
+        }, follow_redirects=False)
+
+        assert response.status_code in [302, 303]
+
+        # Verify link exists
+        from src.models import EmailTemplateTask
+        with db.get_session() as session:
+            link = session.exec(
+                select(EmailTemplateTask).where(
+                    EmailTemplateTask.task_id == "schedule_interview",
+                    EmailTemplateTask.email_template_id == template_id
+                )
+            ).first()
+            assert link is not None
+
+    def test_create_template_with_tasks(self, test_app):
+        """Test creating an email template and linking it to tasks via web form"""
+        # Create some tasks first
+        test_app.post("/api/tasks", params={
+            "task_id": "screen_resume",
+            "name": "Screen Resume"
+        })
+
+        test_app.post("/api/tasks", params={
+            "task_id": "phone_screen",
+            "name": "Phone Screen"
+        })
+
+        # Create a template and link it to the first task
+        response = test_app.post("/template/add", data={
+            "name": "Screening Email",
+            "content": "We'd like to schedule a phone screen",
+            "task_ids": ["screen_resume"]
+        }, follow_redirects=False)
+
+        assert response.status_code in [302, 303]
+
+        # Verify the link was created
+        from src.database import Database
+        from src.models import EmailTemplate, EmailTemplateTask
+        from sqlmodel import select
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            template = session.exec(select(EmailTemplate).where(EmailTemplate.name == "Screening Email")).first()
+            link = session.exec(
+                select(EmailTemplateTask).where(
+                    EmailTemplateTask.task_id == "screen_resume",
+                    EmailTemplateTask.email_template_id == template.id
+                )
+            ).first()
+            assert link is not None
+
+
+class TestChecklistOperations:
+    """Test checklist CRUD operations and state management"""
+
+    def test_create_checklist(self, test_app):
+        """Test creating a checklist via web form"""
+        # Create a task first
+        test_app.post("/api/tasks", params={
+            "task_id": "reference_check",
+            "name": "Reference Check",
+            "description": "Conduct reference checks"
+        })
+
+        # Create a checklist
+        response = test_app.post("/checklists/add", data={
+            "checklist_id": "reference_checklist",
+            "name": "Reference Check List",
+            "description": "Items to verify during reference check",
+            "task_id": "reference_check",
+            "items": "Verify employment dates\nCheck job title\nConfirm responsibilities"
+        }, follow_redirects=False)
+
+        assert response.status_code in [302, 303]
+
+        # Verify checklist was created
+        from src.database import Database
+        from src.models import Checklist
+        from sqlmodel import select
+        import sys
+        import json
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            checklist = session.get(Checklist, "reference_checklist")
+            assert checklist is not None
+            assert checklist.name == "Reference Check List"
+            assert checklist.description == "Items to verify during reference check"
+            assert checklist.task_id == "reference_check"
+
+            # Verify items are stored as JSON
+            items = json.loads(checklist.items)
+            assert len(items) == 3
+            assert "Verify employment dates" in items
+            assert "Check job title" in items
+            assert "Confirm responsibilities" in items
+
+    def test_checklist_one_to_one_constraint(self, test_app):
+        """Test that a task can only have one checklist"""
+        # Create a task
+        test_app.post("/api/tasks", params={
+            "task_id": "onboarding",
+            "name": "Onboarding"
+        })
+
+        # Create first checklist
+        test_app.post("/checklists/add", data={
+            "checklist_id": "onboarding_checklist_1",
+            "name": "Onboarding Checklist 1",
+            "task_id": "onboarding",
+            "items": "Item 1\nItem 2"
+        }, follow_redirects=False)
+
+        # Try to create second checklist for same task - should fail
+        response = test_app.post("/checklists/add", data={
+            "checklist_id": "onboarding_checklist_2",
+            "name": "Onboarding Checklist 2",
+            "task_id": "onboarding",
+            "items": "Item 3\nItem 4"
+        }, follow_redirects=False)
+
+        # Should return error (400 status)
+        assert response.status_code == 400
+
+    def test_edit_checklist(self, test_app):
+        """Test editing a checklist"""
+        # Create task and checklist
+        test_app.post("/api/tasks", params={
+            "task_id": "background_check",
+            "name": "Background Check"
+        })
+
+        test_app.post("/checklists/add", data={
+            "checklist_id": "bg_checklist",
+            "name": "BG Check List",
+            "description": "Original description",
+            "task_id": "background_check",
+            "items": "Item 1\nItem 2"
+        }, follow_redirects=False)
+
+        # Edit the checklist
+        response = test_app.post("/checklists/bg_checklist/edit", data={
+            "checklist_id": "bg_checklist",
+            "name": "Updated BG Check List",
+            "description": "Updated description",
+            "items": "Updated Item 1\nUpdated Item 2\nNew Item 3"
+        }, follow_redirects=False)
+
+        assert response.status_code in [302, 303]
+
+        # Verify changes
+        from src.database import Database
+        from src.models import Checklist
+        import sys
+        import json
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            checklist = session.get(Checklist, "bg_checklist")
+            assert checklist.name == "Updated BG Check List"
+            assert checklist.description == "Updated description"
+            items = json.loads(checklist.items)
+            assert len(items) == 3
+            assert "New Item 3" in items
+
+    def test_delete_checklist(self, test_app):
+        """Test deleting a checklist"""
+        # Create task and checklist
+        test_app.post("/api/tasks", params={
+            "task_id": "drug_test",
+            "name": "Drug Test"
+        })
+
+        test_app.post("/checklists/add", data={
+            "checklist_id": "drug_test_checklist",
+            "name": "Drug Test Checklist",
+            "task_id": "drug_test",
+            "items": "Schedule test\nReceive results"
+        }, follow_redirects=False)
+
+        # Delete the checklist
+        response = test_app.post("/checklists/drug_test_checklist/delete", follow_redirects=False)
+        assert response.status_code in [302, 303]
+
+        # Verify it's deleted
+        from src.database import Database
+        from src.models import Checklist
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            checklist = session.get(Checklist, "drug_test_checklist")
+            assert checklist is None
+
+    def test_checklist_state_save_and_retrieve(self, test_app):
+        """Test saving and retrieving checklist state for a candidate"""
+        import json
+
+        # Create candidate
+        response = test_app.post("/api/candidates", params={
+            "name": "Test Candidate",
+            "email": "test@example.com",
+            "workflow_id": "standard_workflow"
+        })
+
+        # Create task and checklist
+        test_app.post("/api/tasks", params={
+            "task_id": "training",
+            "name": "Training"
+        })
+
+        test_app.post("/checklists/add", data={
+            "checklist_id": "training_checklist",
+            "name": "Training Checklist",
+            "task_id": "training",
+            "items": "Complete module 1\nComplete module 2\nPass quiz"
+        }, follow_redirects=False)
+
+        # Save checklist state
+        items_state = [True, False, True]  # Module 1 done, module 2 not done, quiz done
+        response = test_app.post(
+            "/api/checklist/training_checklist/save",
+            json={
+                "candidate_id": "test@example.com",
+                "task_identifier": "training",
+                "items_state": items_state
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Retrieve checklist view to verify state was saved
+        response = test_app.get(
+            "/checklist/training_checklist/view?candidate=test@example.com&task=training"
+        )
+        assert response.status_code == 200
+
+        # Verify state in database
+        from src.database import Database
+        from src.models import CandidateChecklistState
+        from sqlmodel import select
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            state = session.exec(
+                select(CandidateChecklistState).where(
+                    CandidateChecklistState.candidate_id == "test@example.com",
+                    CandidateChecklistState.task_identifier == "training",
+                    CandidateChecklistState.checklist_id == "training_checklist"
+                )
+            ).first()
+
+            assert state is not None
+            saved_items = json.loads(state.items_state)
+            assert saved_items == items_state
+            assert state.last_modified is not None
+
+    def test_checklist_state_update(self, test_app):
+        """Test updating existing checklist state"""
+        import json
+
+        # Create candidate
+        test_app.post("/api/candidates", params={
+            "name": "Update Test",
+            "email": "update@example.com",
+            "workflow_id": "standard_workflow"
+        })
+
+        # Create task and checklist
+        test_app.post("/api/tasks", params={
+            "task_id": "orientation",
+            "name": "Orientation"
+        })
+
+        test_app.post("/checklists/add", data={
+            "checklist_id": "orientation_checklist",
+            "name": "Orientation Checklist",
+            "task_id": "orientation",
+            "items": "Tour office\nMeet team\nSetup workstation"
+        }, follow_redirects=False)
+
+        # Save initial state
+        initial_state = [True, False, False]
+        test_app.post(
+            "/api/checklist/orientation_checklist/save",
+            json={
+                "candidate_id": "update@example.com",
+                "task_identifier": "orientation",
+                "items_state": initial_state
+            }
+        )
+
+        # Update state
+        updated_state = [True, True, True]
+        response = test_app.post(
+            "/api/checklist/orientation_checklist/save",
+            json={
+                "candidate_id": "update@example.com",
+                "task_identifier": "orientation",
+                "items_state": updated_state
+            }
+        )
+
+        assert response.status_code == 200
+
+        # Verify updated state
+        from src.database import Database
+        from src.models import CandidateChecklistState
+        from sqlmodel import select
+        import sys
+
+        test_dir = sys.argv[2]
+        db = Database(f"{test_dir}/hiring.db")
+
+        with db.get_session() as session:
+            state = session.exec(
+                select(CandidateChecklistState).where(
+                    CandidateChecklistState.candidate_id == "update@example.com",
+                    CandidateChecklistState.task_identifier == "orientation",
+                    CandidateChecklistState.checklist_id == "orientation_checklist"
+                )
+            ).first()
+
+            saved_items = json.loads(state.items_state)
+            assert saved_items == updated_state
+
+    def test_checklist_view_page_loads(self, test_app):
+        """Test that checklist view page loads correctly"""
+        # Create candidate
+        test_app.post("/api/candidates", params={
+            "name": "View Test",
+            "email": "view@example.com",
+            "workflow_id": "test_workflow"
+        })
+
+        # Create task
+        test_app.post("/api/tasks", params={
+            "task_id": "review",
+            "name": "Review"
+        })
+
+        # Create checklist for task
+        test_app.post("/checklists/add", data={
+            "checklist_id": "review_checklist",
+            "name": "Review Checklist",
+            "task_id": "review",
+            "items": "Item 1\nItem 2\nItem 3"
+        }, follow_redirects=False)
+
+        # Get checklist view page
+        response = test_app.get("/checklist/review_checklist/view?candidate=view@example.com&task=review")
+        assert response.status_code == 200
+        assert b"Review Checklist" in response.content
+        assert b"Item 1" in response.content
+
+
 class TestAPIDocumentation:
     """Test API documentation is available"""
 

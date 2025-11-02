@@ -36,7 +36,6 @@
                     <div class="task-identifier">{{ task_info.definition.identifier }}</div>
                 </div>
                 <div class="task-control">
-                    {% if task_info.candidate_task %}
                     <select class="status-select"
                             onchange="updateTaskStatus('{{ candidate.email|urlencode }}', '{{ task_info.definition.identifier }}', this)">
                         <option value="not_started" {% if task_info.state == 'not_started' %}selected{% endif %}>Not Started</option>
@@ -44,8 +43,31 @@
                         <option value="completed" {% if task_info.state == 'completed' %}selected{% endif %}>Completed</option>
                         <option value="na" {% if task_info.state == 'na' %}selected{% endif %}>N/A</option>
                     </select>
-                    {% else %}
-                    <button class="btn btn-sm" onclick="createTask('{{ candidate.email|urlencode }}', '{{ task_info.definition.identifier }}')">Create</button>
+
+                    {% if task_info.email_templates or task_info.checklist %}
+                    <div style="margin-top: 8px; position: relative;">
+                        <button type="button" class="btn btn-sm" onclick="toggleMenu('menu-{{ task_info.definition.identifier }}')" style="background-color: #4CAF50; color: white;">
+                            Actions
+                        </button>
+                        <div id="menu-{{ task_info.definition.identifier }}" style="display: none; position: absolute; background-color: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; margin-top: 4px;">
+                            {% for template in task_info.email_templates %}
+                            <a href="/email/compose/{{ template.id }}?candidate={{ candidate.email|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
+                                <strong>{{ template.name }}</strong>
+                                {% if template.description %}
+                                <br><small style="color: #666;">{{ template.description }}</small>
+                                {% endif %}
+                            </a>
+                            {% endfor %}
+                            {% if task_info.checklist %}
+                            <a href="/checklist/{{ task_info.checklist.id }}/view?candidate={{ candidate.email|urlencode }}&task={{ task_info.definition.identifier|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
+                                <strong>{{ task_info.checklist.name }}</strong>
+                                {% if task_info.checklist.description %}
+                                <br><small style="color: #666;">{{ task_info.checklist.description }}</small>
+                                {% endif %}
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -53,5 +75,28 @@
         {% endfor %}
     </div>
 </div>
+
+<script>
+function toggleMenu(menuId) {
+    var menu = document.getElementById(menuId);
+    // Close all other menus
+    document.querySelectorAll('[id^="menu-"]').forEach(function(m) {
+        if (m.id !== menuId) {
+            m.style.display = 'none';
+        }
+    });
+    // Toggle this menu
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('button') && !event.target.closest('[id^="menu-"]')) {
+        document.querySelectorAll('[id^="menu-"]').forEach(function(m) {
+            m.style.display = 'none';
+        });
+    }
+});
+</script>
 
 {% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Task{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ 'Edit' if mode == 'edit' else 'Add' }} Task</h2>
+
+    <form method="post" action="{{ '/tasks/' + task.task_id + '/edit' if mode == 'edit' else '/tasks/add' }}" id="taskForm">
+        <div class="form-group">
+            <label for="task_id">Task ID *</label>
+            <input type="text" id="task_id" name="task_id" value="{{ task.task_id if task else '' }}" required {{ 'readonly' if mode == 'edit' else '' }}>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Unique identifier for this task (e.g., "interview_schedule", "reference_check")
+                {% if mode == 'edit' %}(Cannot be changed){% endif %}
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="name">Task Name *</label>
+            <input type="text" id="name" name="name" value="{{ task.name if task else '' }}" required placeholder="e.g., Schedule Interview">
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" rows="4" placeholder="Brief description of this task">{{ task.description if task else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Link Email Templates</label>
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
+                {% if email_templates %}
+                    {% for template in email_templates %}
+                    <div style="margin-bottom: 8px;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" name="template_ids" value="{{ template.id }}"
+                                {% if template.id in linked_template_ids %}checked{% endif %}
+                                style="margin-right: 8px;">
+                            <div>
+                                <strong>{{ template.name }}</strong>
+                                {% if template.description %}
+                                <br><small style="color: #666;">{{ template.description }}</small>
+                                {% endif %}
+                            </div>
+                        </label>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p style="color: #999; margin: 0;">No email templates available. <a href="/template/add">Create one</a></p>
+                {% endif %}
+            </div>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Select which email templates should be associated with this task
+            </small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">{{ 'Save Changes' if mode == 'edit' else 'Create Task' }}</button>
+            <a href="/tasks" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

@@ -40,19 +40,32 @@ class CandidateTask(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class ActionState(SQLModel, table=True):
-    """Action state storage"""
-    __tablename__ = "action_states"
+class Checklist(SQLModel, table=True):
+    """Checklist definition"""
+    __tablename__ = "checklists"
 
-    candidate_id: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
-    action_id: str = Field(primary_key=True)
-
-    # Action state as JSON
-    state: Optional[dict] = Field(default_factory=dict, sa_type=JSON)
+    id: str = Field(primary_key=True)
+    name: str
+    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    task_id: str = Field(foreign_key="tasks.task_id", unique=True, ondelete="CASCADE")
+    items: str = Field(sa_column=Column(Text))  # JSON string: ["item1", "item2", ...]
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class CandidateChecklistState(SQLModel, table=True):
+    """Checklist completion state for a candidate"""
+    __tablename__ = "candidate_checklist_states"
+
+    candidate_id: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
+    task_identifier: str = Field(primary_key=True)
+    checklist_id: str = Field(foreign_key="checklists.id", primary_key=True, ondelete="CASCADE")
+    items_state: str = Field(sa_column=Column(Text))  # JSON string: [true, false, true, ...]
+
+    # System timestamps
+    last_modified: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EmailTemplate(SQLModel, table=True):
@@ -85,3 +98,14 @@ class Task(SQLModel, table=True):
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class EmailTemplateTask(SQLModel, table=True):
+    """Many-to-many relationship between email templates and tasks"""
+    __tablename__ = "email_template_tasks"
+
+    email_template_id: str = Field(foreign_key="email_templates.id", primary_key=True, ondelete="CASCADE")
+    task_id: str = Field(foreign_key="tasks.task_id", primary_key=True, ondelete="CASCADE")
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
