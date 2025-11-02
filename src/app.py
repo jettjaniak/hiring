@@ -2,6 +2,13 @@
 """
 Simple web interface for hiring process client
 """
+import sys
+from pathlib import Path
+
+# Get project root directory (parent of src/)
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -10,9 +17,9 @@ from sqlmodel import Session, select
 import uuid
 import argparse
 from datetime import datetime
-from database import Database
-from workflow_loader import WorkflowLoader
-from models import Candidate, CandidateTask, ActionState
+from src.database import Database
+from src.workflow_loader import WorkflowLoader
+from src.models import Candidate, CandidateTask, ActionState
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -32,8 +39,8 @@ db_file = os.path.join(data_dir, 'hiring.db')
 db = Database(db_file)
 db.init_db()
 
-# Load workflow definitions
-workflow_loader = WorkflowLoader()
+# Load workflow definitions (from project root)
+workflow_loader = WorkflowLoader(workflows_dir=str(project_root / "workflows"))
 
 # Initialize FastAPI
 app = FastAPI(
@@ -44,8 +51,8 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-templates = Jinja2Templates(directory="templates")
-app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory=str(project_root / "templates"))
+app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
 
 
 # Dependency for database sessions
