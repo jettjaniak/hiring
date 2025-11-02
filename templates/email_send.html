@@ -71,7 +71,7 @@
         <select id="candidate-select" name="candidate">
             <option value="">-- Select a candidate --</option>
             {% for candidate in candidates %}
-            <option value="{{ candidate.id }}">
+            <option value="{{ candidate.email }}">
                 {{ candidate.name or 'Unnamed' }}
                 {% if candidate.email %}({{ candidate.email }}){% endif %}
             </option>

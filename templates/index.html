@@ -27,8 +27,8 @@
             <td>{{ candidate.workflow_id }}</td>
             <td>{{ candidate.phone or '' }}</td>
             <td>
-                <a href="/candidate/{{ candidate.id }}/workflow" class="btn">Workflow</a>
-                <a href="/candidate/{{ candidate.id }}" class="btn btn-secondary">Details</a>
+                <a href="/candidate/{{ candidate.email|urlencode }}/workflow" class="btn">Workflow</a>
+                <a href="/candidate/{{ candidate.email|urlencode }}" class="btn btn-secondary">Details</a>
             </td>
         </tr>
         {% endfor %}

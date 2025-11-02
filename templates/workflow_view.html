@@ -10,7 +10,7 @@
 <div class="workflow-header">
     <h2>{{ candidate.name or 'Candidate' }} - Workflow Progress</h2>
     <div>
-        <a href="/candidate/{{ candidate.id }}" class="btn btn-secondary">View Details</a>
+        <a href="/candidate/{{ candidate.email|urlencode }}" class="btn btn-secondary">View Details</a>
         <a href="/" class="btn btn-secondary">Back to List</a>
     </div>
 </div>
@@ -38,14 +38,14 @@
                 <div class="task-control">
                     {% if task_info.candidate_task %}
                     <select class="status-select"
-                            onchange="updateTaskStatus('{{ candidate.id }}', '{{ task_info.definition.identifier }}', this)">
+                            onchange="updateTaskStatus('{{ candidate.email|urlencode }}', '{{ task_info.definition.identifier }}', this)">
                         <option value="not_started" {% if task_info.state == 'not_started' %}selected{% endif %}>Not Started</option>
                         <option value="in_progress" {% if task_info.state == 'in_progress' %}selected{% endif %}>In Progress</option>
                         <option value="completed" {% if task_info.state == 'completed' %}selected{% endif %}>Completed</option>
                         <option value="na" {% if task_info.state == 'na' %}selected{% endif %}>N/A</option>
                     </select>
                     {% else %}
-                    <button class="btn btn-sm" onclick="createTask('{{ candidate.id }}', '{{ task_info.definition.identifier }}')">Create</button>
+                    <button class="btn btn-sm" onclick="createTask('{{ candidate.email|urlencode }}', '{{ task_info.definition.identifier }}')">Create</button>
                     {% endif %}
                 </div>
             </div>

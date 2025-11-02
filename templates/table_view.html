@@ -31,7 +31,7 @@
         <tbody>
             {% for data in candidate_data %}
             <tr>
-                <td class="candidate-name-cell" onclick="window.location.href='/candidate/{{ data.candidate.id }}/workflow'">
+                <td class="candidate-name-cell" onclick="window.location.href='/candidate/{{ data.candidate.email|urlencode }}/workflow'">
                     {{ data.candidate.name or '(No name)' }}
                 </td>
                 {% for task_identifier, task_meta in sorted_tasks %}
@@ -40,7 +40,7 @@
                         <td class="task-cell not-in-workflow"></td>
                     {% else %}
                         <td class="task-cell {{ task_state.state }}">
-                            {{ render_task_control(data.candidate.id, task_identifier, task_state.state, task_state.exists) }}
+                            {{ render_task_control(data.candidate.email|urlencode, task_identifier, task_state.state, task_state.exists) }}
                         </td>
                     {% endif %}
                 {% endfor %}
