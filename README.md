@@ -37,7 +37,7 @@ You can customize the port and data directory:
 - **Edit candidate**: Edit candidate information from the detail view
 - **Workflow view**: Visualize candidate progress through their hiring workflow as a DAG
 - **Update task status**: Click on tasks to change their status (not started, in progress, completed, n/a)
-- **Soft delete**: Delete candidates (they're marked as deleted but not removed from database)
+- **Delete candidates**: Permanently remove candidates from the database
 
 ## REST API
 
@@ -57,7 +57,7 @@ Visit http://localhost:5001/api/docs for interactive API documentation where you
 - `POST /api/candidates` - Create new candidate
 - `GET /api/candidates/{id}` - Get candidate details
 - `PUT /api/candidates/{id}` - Update candidate
-- `DELETE /api/candidates/{id}` - Soft delete candidate
+- `DELETE /api/candidates/{id}` - Delete candidate permanently
 
 **Tasks**
 - `GET /api/candidates/{id}/tasks` - List all tasks for a candidate
@@ -129,7 +129,6 @@ requirements.txt   - Python dependencies
 ### Candidate
 - Basic information: name, email, phone, resume URL, notes
 - Assigned to a workflow
-- Soft delete support (deleted flag + deleted_at timestamp)
 - Automatic timestamps (created_at, updated_at)
 
 ### CandidateTask

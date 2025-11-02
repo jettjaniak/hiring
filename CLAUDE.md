@@ -53,7 +53,7 @@ Auto-generated REST API with full Swagger/OpenAPI documentation at `/api/docs`.
 - `POST /api/candidates` - Create new candidate
 - `GET /api/candidates/{id}` - Get candidate by ID
 - `PUT /api/candidates/{id}` - Update candidate
-- `DELETE /api/candidates/{id}` - Soft delete candidate
+- `DELETE /api/candidates/{id}` - Delete candidate permanently
 
 ### Task Endpoints
 
@@ -101,7 +101,6 @@ hiring/
 - **REST API**: Auto-generated CRUD API with Swagger documentation
 - **Workflow Visualization**: DAG view showing task dependencies and progress
 - **Table View**: Grid view of all candidates and their task statuses
-- **Soft Delete**: Candidates marked as deleted but not removed from database
 - **No External Dependencies**: No server, no sync, no encryption - just simple local data management
 
 ## Technology Stack

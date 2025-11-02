@@ -83,8 +83,8 @@ def create_candidate(
 
 @app.get("/api/candidates", response_model=List[Candidate])
 def list_candidates(session: Session = Depends(get_session)):
-    """List all candidates (excluding deleted)"""
-    candidates = session.exec(select(Candidate).where(Candidate.deleted == False)).all()
+    """List all candidates"""
+    candidates = session.exec(select(Candidate)).all()
     return candidates
 
 
@@ -135,14 +135,12 @@ def update_candidate(
 
 @app.delete("/api/candidates/{candidate_id}", status_code=204)
 def delete_candidate(candidate_id: str, session: Session = Depends(get_session)):
-    """Soft delete a candidate"""
+    """Delete a candidate"""
     candidate = session.get(Candidate, candidate_id)
     if not candidate:
         raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
 
-    candidate.deleted = True
-    candidate.deleted_at = datetime.utcnow()
-    session.add(candidate)
+    session.delete(candidate)
     session.commit()
     return None
 
@@ -369,14 +367,14 @@ def compute_dag_layout(workflow):
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, session: Session = Depends(get_session)):
     """List all candidates"""
-    candidates = session.exec(select(Candidate).where(Candidate.deleted == False)).all()
+    candidates = session.exec(select(Candidate)).all()
     return templates.TemplateResponse("index.html", {"request": request, "candidates": candidates})
 
 
 @app.get("/table", response_class=HTMLResponse)
 def table_view(request: Request, session: Session = Depends(get_session)):
     """Table view of all candidates and tasks"""
-    candidates = session.exec(select(Candidate).where(Candidate.deleted == False)).all()
+    candidates = session.exec(select(Candidate)).all()
 
     task_info = {}
     for candidate in candidates:
@@ -594,9 +592,7 @@ def delete_candidate_form(candidate_id: str, session: Session = Depends(get_sess
     if not candidate:
         return RedirectResponse(url="/", status_code=302)
 
-    candidate.deleted = True
-    candidate.deleted_at = datetime.utcnow()
-    session.add(candidate)
+    session.delete(candidate)
     session.commit()
 
     return RedirectResponse(url="/", status_code=302)

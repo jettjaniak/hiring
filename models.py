@@ -25,10 +25,6 @@ class Candidate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
 
-    # Soft delete
-    deleted: bool = False
-    deleted_at: Optional[datetime] = None
-
 
 class CandidateTask(SQLModel, table=True):
     """Task status record"""
