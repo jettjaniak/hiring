@@ -121,7 +121,7 @@
         <select id="candidate-select" style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; min-width: 300px;">
             <option value="">-- Select a candidate (optional) --</option>
             {% for c in candidates %}
-            <option value="{{ c.id }}">{{ c.name or 'Unnamed' }}{% if c.email %} ({{ c.email }}){% endif %}</option>
+            <option value="{{ c.email }}">{{ c.name or 'Unnamed' }}{% if c.email %} ({{ c.email }}){% endif %}</option>
             {% endfor %}
         </select>
     </div>

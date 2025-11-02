@@ -27,6 +27,7 @@ from collections import defaultdict, deque
 import uvicorn
 import os
 import re
+from urllib.parse import quote, unquote
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Hiring Process Web Client')
@@ -68,8 +69,8 @@ def get_session():
 @app.post("/api/candidates", response_model=Candidate, status_code=201)
 def create_candidate(
     workflow_id: str,
+    email: str,
     name: Optional[str] = None,
-    email: Optional[str] = None,
     phone: Optional[str] = None,
     resume_url: Optional[str] = None,
     notes: Optional[str] = None,
@@ -77,10 +78,9 @@ def create_candidate(
 ):
     """Create a new candidate"""
     candidate = Candidate(
-        id=f"candidate-{uuid.uuid4().hex[:12]}",
+        email=email,
         workflow_id=workflow_id,
         name=name,
-        email=email,
         phone=phone,
         resume_url=resume_url,
         notes=notes
@@ -422,7 +422,7 @@ def table_view(request: Request, session: Session = Depends(get_session)):
 
         workflow_task_ids = {t.identifier for t in workflow.tasks}
         candidate_tasks = session.exec(
-            select(CandidateTask).where(CandidateTask.candidate_id == candidate.id)
+            select(CandidateTask).where(CandidateTask.candidate_id == candidate.email)
         ).all()
         task_status = {ct.task_identifier: ct for ct in candidate_tasks}
 
@@ -465,20 +465,18 @@ def add_candidate_form(request: Request):
 @app.post("/candidate/add")
 def add_candidate(
     workflow_id: str = Form(...),
+    email: str = Form(...),
     name: Optional[str] = Form(None),
-    email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     resume_url: Optional[str] = Form(None),
     notes: Optional[str] = Form(None),
     session: Session = Depends(get_session)
 ):
     """Add a new candidate"""
-    candidate_id = f"candidate-{uuid.uuid4().hex[:12]}"
     candidate = Candidate(
-        id=candidate_id,
+        email=email,
         workflow_id=workflow_id,
         name=name,
-        email=email,
         phone=phone,
         resume_url=resume_url,
         notes=notes
@@ -487,7 +485,7 @@ def add_candidate(
     session.add(candidate)
     session.commit()
 
-    return RedirectResponse(url=f"/candidate/{candidate_id}", status_code=302)
+    return RedirectResponse(url=f"/candidate/{quote(email)}", status_code=302)
 
 
 @app.get("/candidate/{candidate_id}/workflow", response_class=HTMLResponse)
@@ -592,7 +590,7 @@ def edit_candidate(
     session.add(candidate)
     session.commit()
 
-    return RedirectResponse(url=f"/candidate/{candidate_id}", status_code=302)
+    return RedirectResponse(url=f"/candidate/{quote(candidate.email)}", status_code=302)
 
 
 @app.post("/candidate/{candidate_id}/delete")
