@@ -1,0 +1,12 @@
+candidates:
+  - email: "alice.johnson@example.com"
+    first_name: "Alice"
+    full_name: "Alice Johnson"
+    
+  - email: "bob.smith@example.com"
+    first_name: "Bob"
+    full_name: "Bob Smith"
+    
+  - email: "charlie.brown@example.com"
+    first_name: "Charlie"
+    full_name: "Charlie Brown"

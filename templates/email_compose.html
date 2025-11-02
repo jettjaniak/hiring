@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}Compose Email{% endblock %}
+
+{% block extra_head %}
+<!-- Nunjucks templating library -->
+<script src="https://cdn.jsdelivr.net/npm/nunjucks@3.2.4/browser/nunjucks.min.js"></script>
+<style>
+    .email-composer {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .composer-grid {
+        display: grid;
+        grid-template-columns: 30fr 70fr;
+        gap: 30px;
+        margin-top: 20px;
+    }
+    @media (max-width: 768px) {
+        .composer-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    .composer-section {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 5px;
+    }
+    .composer-section h3 {
+        margin-top: 0;
+        border-bottom: 2px solid #ddd;
+        padding-bottom: 10px;
+    }
+    .variable-input {
+        margin-bottom: 15px;
+    }
+    .variable-input label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    .variable-input input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+    }
+    .preview-field {
+        margin-bottom: 15px;
+        padding: 10px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        min-height: 40px;
+    }
+    .preview-field-label {
+        font-weight: bold;
+        color: #555;
+        margin-bottom: 5px;
+    }
+    .preview-content {
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 3px;
+        padding: 15px;
+        min-height: 200px;
+    }
+    .action-buttons {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+    }
+    .btn-primary {
+        background: #007bff;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .btn-primary:hover {
+        background: #0056b3;
+    }
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .btn-secondary:hover {
+        background: #545b62;
+    }
+    .btn-grey {
+        background: #9e9e9e;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .btn-grey:hover {
+        background: #757575;
+    }
+    .candidate-info {
+        background: #e7f3ff;
+        padding: 10px;
+        border-radius: 3px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="email-composer">
+    <h2>Compose Email</h2>
+
+    <div class="candidate-info">
+        <label for="candidate-select" style="font-weight: bold; margin-right: 10px;">Candidate:</label>
+        <select id="candidate-select" style="padding: 8px; border: 1px solid #ddd; border-radius: 3px; min-width: 300px;">
+            <option value="">-- Select a candidate (optional) --</option>
+            {% for c in candidates %}
+            <option value="{{ c.id }}">{{ c.name or 'Unnamed' }}{% if c.email %} ({{ c.email }}){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="composer-grid">
+        <!-- Left: Input Fields -->
+        <div class="composer-section">
+            <h3>Template Variables</h3>
+
+            {% if variables %}
+            <div id="custom-variables">
+                {% for var in variables %}
+                    {% if var.type == 'text' %}
+                        <div class="variable-input">
+                            <label for="var_{{ var.name }}">{{ var.name }}</label>
+                            <input type="text" id="var_{{ var.name }}" data-var="{{ var.name }}" data-type="text" class="custom-var-input">
+                        </div>
+                        {% elif var.type == 'boolean' %}
+                        <div class="variable-input" style="display: flex; align-items: center; justify-content: flex-start;">
+                            <input type="checkbox" id="var_{{ var.name }}" data-var="{{ var.name }}" data-type="boolean" class="custom-var-checkbox" style="margin-right: 8px; margin-top: 0; width: auto;">
+                            <label for="var_{{ var.name }}" style="margin: 0; font-weight: bold; flex-shrink: 0;">{{ var.name }}</label>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Right: Preview -->
+        <div class="composer-section">
+            <h3>Email Preview</h3>
+
+            <div style="margin-bottom: 10px;" id="preview-to-line"></div>
+            <div style="margin-bottom: 10px;" id="preview-cc-line"></div>
+            <div style="margin-bottom: 10px;" id="preview-bcc-line"></div>
+            <div style="margin-bottom: 10px;" id="preview-subject-line"></div>
+
+            <div style="margin-top: 20px; background: white; border: 1px solid #ddd; border-radius: 3px; padding: 15px; min-height: 200px;" id="preview-content"></div>
+        </div>
+    </div>
+
+    <div class="action-buttons">
+        <button class="btn-primary" onclick="copyAndOpenEmail()">Copy & Open Email Client</button>
+        <button class="btn-grey" onclick="copyToClipboard()">Copy Only</button>
+        <button class="btn-grey" onclick="openEmailClient()">Open Email Only</button>
+    </div>
+</div>
+
+<script>
+// Configure Nunjucks
+nunjucks.configure({ autoescape: false });
+
+// Store original templates
+const templates = {
+    subject: {{ template.subject|tojson|safe }},
+    to: {{ template.to|tojson|safe }},
+    cc: {{ template.cc|tojson|safe }},
+    bcc: {{ template.bcc|tojson|safe }},
+    content: {{ template.content|tojson|safe }}
+};
+
+// Current values - initialize with empty candidate
+let currentValues = {
+    candidate: {}
+};
+
+// Fetch candidate data from API
+async function loadCandidate(candidateId) {
+    if (!candidateId) {
+        currentValues.candidate = {};
+        updatePreviews();
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/candidates/${candidateId}`);
+        if (response.ok) {
+            const candidateData = await response.json();
+
+            // Replace empty/null values with placeholders
+            currentValues.candidate = {};
+            for (const [key, value] of Object.entries(candidateData)) {
+                if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
+                    currentValues.candidate[key] = `<b><u>CANDIDATE.${key.toUpperCase()}</u></b>`;
+                } else {
+                    currentValues.candidate[key] = value;
+                }
+            }
+
+            updatePreviews();
+        } else {
+            console.error('Failed to load candidate:', response.status, response.statusText);
+            // Clear candidate data and update previews to show empty state
+            currentValues.candidate = {};
+            updatePreviews();
+        }
+    } catch (error) {
+        console.error('Error loading candidate:', error);
+        // Clear candidate data and update previews to show empty state
+        currentValues.candidate = {};
+        updatePreviews();
+    }
+}
+
+// Function to substitute variables using Nunjucks
+function substituteVariables(text) {
+    if (!text) return text;
+
+    try {
+        // Create a copy of currentValues with placeholders for empty variables
+        const valuesWithPlaceholders = {...currentValues};
+
+        // Get all custom variable inputs and checkboxes
+        document.querySelectorAll('.custom-var-input, .custom-var-checkbox').forEach(input => {
+            const varName = input.dataset.var;
+            const varType = input.dataset.type;
+
+            if (varType === 'text') {
+                // For text variables, if empty, use placeholder
+                if (!valuesWithPlaceholders[varName] || valuesWithPlaceholders[varName].trim() === '') {
+                    valuesWithPlaceholders[varName] = `<b><u>${varName.toUpperCase()}</u></b>`;
+                }
+            }
+            // Boolean variables are fine as-is (true/false)
+        });
+
+        return nunjucks.renderString(text, valuesWithPlaceholders);
+    } catch (error) {
+        console.error('Template rendering error:', error);
+        return text;
+    }
+}
+
+// Function to replace <p> tags with <br> tags
+function replaceParagraphsWithBreaks(html) {
+    if (!html) return html;
+    // Replace opening <p> tags with nothing, closing </p> tags with <br><br>
+    return html
+        .replace(/<p>/gi, '')
+        .replace(/<\/p>/gi, '<br><br>');
+}
+
+// Function to update all previews
+function updatePreviews() {
+    const subject = substituteVariables(templates.subject);
+    const to = substituteVariables(templates.to);
+    const cc = substituteVariables(templates.cc);
+    const bcc = substituteVariables(templates.bcc);
+
+    // To line - always show
+    document.getElementById('preview-to-line').innerHTML = '<b>To:</b> ' + (to || '');
+
+    // CC line (hide if empty)
+    if (cc && cc.trim()) {
+        document.getElementById('preview-cc-line').innerHTML = '<b>CC:</b> ' + cc;
+        document.getElementById('preview-cc-line').style.display = 'block';
+    } else {
+        document.getElementById('preview-cc-line').style.display = 'none';
+    }
+
+    // BCC line (hide if empty)
+    if (bcc && bcc.trim()) {
+        document.getElementById('preview-bcc-line').innerHTML = '<b>BCC:</b> ' + bcc;
+        document.getElementById('preview-bcc-line').style.display = 'block';
+    } else {
+        document.getElementById('preview-bcc-line').style.display = 'none';
+    }
+
+    // Subject line - always show
+    document.getElementById('preview-subject-line').innerHTML = '<b>Subject:</b> ' + (subject || '');
+
+    const content = substituteVariables(templates.content) || '';
+    document.getElementById('preview-content').innerHTML = replaceParagraphsWithBreaks(content);
+}
+
+// Add event listeners to all custom variable inputs (text inputs)
+document.querySelectorAll('.custom-var-input').forEach(input => {
+    const varName = input.dataset.var;
+
+    input.addEventListener('input', function() {
+        currentValues[varName] = this.value;
+        updatePreviews();
+    });
+});
+
+// Add event listeners to all checkbox inputs (boolean variables)
+document.querySelectorAll('.custom-var-checkbox').forEach(checkbox => {
+    const varName = checkbox.dataset.var;
+
+    checkbox.addEventListener('change', function() {
+        currentValues[varName] = this.checked;
+        updatePreviews();
+    });
+});
+
+// Validate that all required text variables are filled
+function validateVariables() {
+    const missingVars = [];
+
+    // Check all text variables
+    document.querySelectorAll('.custom-var-input').forEach(input => {
+        const varName = input.dataset.var;
+        const value = input.value.trim();
+        if (!value) {
+            missingVars.push(varName);
+        }
+    });
+
+    if (missingVars.length > 0) {
+        const proceed = confirm(
+            `Warning: The following variables are empty:\n\n${missingVars.join(', ')}\n\nDo you want to continue anyway?`
+        );
+        return proceed;
+    }
+
+    return true;
+}
+
+// Copy email content to clipboard
+async function copyToClipboard() {
+    if (!validateVariables()) {
+        return;
+    }
+
+    try {
+        const content = substituteVariables(templates.content) || '';
+
+        // For HTML format: keep the HTML as-is (for rich text editors)
+        const htmlContent = content;
+
+        // For plain text format: convert HTML to plain text
+        // First convert <br> and </p> to newlines
+        let plainText = content
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n\n')
+            .replace(/<p>/gi, '');
+
+        // Strip remaining HTML tags
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = plainText;
+        plainText = tempDiv.textContent || tempDiv.innerText || '';
+
+        // Copy both formats to clipboard using ClipboardItem
+        await navigator.clipboard.write([
+            new ClipboardItem({
+                'text/html': new Blob([htmlContent], { type: 'text/html' }),
+                'text/plain': new Blob([plainText], { type: 'text/plain' })
+            })
+        ]);
+
+    } catch (err) {
+        console.error('Failed to copy:', err);
+    }
+}
+
+// Open in email client using mailto (without body)
+function openEmailClient() {
+    if (!validateVariables()) {
+        return;
+    }
+
+    const subject = encodeURIComponent(substituteVariables(templates.subject) || '');
+    const to = encodeURIComponent(substituteVariables(templates.to) || '');
+    const cc = encodeURIComponent(substituteVariables(templates.cc) || '');
+    const bcc = encodeURIComponent(substituteVariables(templates.bcc) || '');
+
+    let mailtoLink = `mailto:${to}?subject=${subject}`;
+    if (cc) mailtoLink += `&cc=${cc}`;
+    if (bcc) mailtoLink += `&bcc=${bcc}`;
+
+    window.location.href = mailtoLink;
+}
+
+// Copy to clipboard and open email client
+function copyAndOpenEmail() {
+    if (!validateVariables()) {
+        return;
+    }
+
+    copyToClipboard();
+    openEmailClient();
+}
+
+// Candidate dropdown change handler
+document.getElementById('candidate-select').addEventListener('change', function() {
+    const candidateId = this.value;
+    // Update URL
+    const url = new URL(window.location);
+    if (candidateId) {
+        url.searchParams.set('candidate', candidateId);
+    } else {
+        url.searchParams.delete('candidate');
+    }
+    window.history.pushState({}, '', url);
+
+    // Load candidate data
+    loadCandidate(candidateId);
+});
+
+// Initialize from URL parameters
+const urlParams = new URLSearchParams(window.location.search);
+
+// Load candidate if specified
+const candidateId = urlParams.get('candidate');
+if (candidateId) {
+    document.getElementById('candidate-select').value = candidateId;
+}
+
+// Pre-populate custom variables from URL params
+document.querySelectorAll('.custom-var-input').forEach(input => {
+    const varName = input.dataset.var;
+    if (urlParams.has(varName)) {
+        input.value = urlParams.get(varName);
+        currentValues[varName] = urlParams.get(varName);
+    }
+});
+
+document.querySelectorAll('.custom-var-checkbox').forEach(checkbox => {
+    const varName = checkbox.dataset.var;
+    if (urlParams.has(varName)) {
+        const val = urlParams.get(varName).toLowerCase();
+        checkbox.checked = (val === 'true' || val === '1' || val === 'yes');
+        currentValues[varName] = checkbox.checked;
+    }
+});
+
+// Initial preview update - always call to show placeholders
+// If candidate is loaded, loadCandidate() will update again
+updatePreviews();
+
+// Load candidate after initial preview update
+if (candidateId) {
+    loadCandidate(candidateId);
+}
+</script>
+
+{% endblock %}

@@ -1,0 +1,47 @@
+name: "Interview Invitation (with CC)"
+to: "{{candidate.email}}"
+cc: ["recruiting@company.com", "hiring-manager@company.com"]
+bcc: []
+subject: "Interview invitation - {{candidate.full_name}}"
+
+variables:
+  position:
+    type: "text"
+    label: "Position title"
+    placeholder: "e.g., Senior Software Engineer"
+  
+  interview_date:
+    type: "text"
+    label: "Interview date & time"
+    placeholder: "e.g., Monday, March 20 at 2:00 PM EST"
+  
+  interview_type:
+    type: "choice"
+    label: "Interview format"
+    options:
+      - value: "video"
+        label: "Video call"
+      - value: "phone"
+        label: "Phone call"
+      - value: "in_person"
+        label: "In person"
+  
+  zoom_link:
+    type: "text"
+    label: "Zoom/video link (if applicable)"
+    placeholder: "https://zoom.us/j/..."
+  
+  office_address:
+    type: "textarea"
+    label: "Office address (if in-person)"
+    placeholder: "123 Main St, Suite 400..."
+  
+  interviewer_name:
+    type: "text"
+    label: "Interviewer name"
+    placeholder: "e.g., Jane Smith"
+  
+  sender_name:
+    type: "text"
+    label: "Your name"
+    default: "Recruiting Team"

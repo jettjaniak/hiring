@@ -4,6 +4,7 @@
     <title>{% block title %}Hiring Process Management{% endblock %}</title>
     <link rel="stylesheet" href="/static/css/styles.css">
     {% block extra_css %}{% endblock %}
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
     <header>
@@ -11,6 +12,8 @@
         <nav>
             <a href="/">Candidates</a>
             <a href="/candidate/add">Add Candidate</a>
+            <a href="/templates">Email Templates</a>
+            <a href="/email/send">Send Email</a>
         </nav>
     </header>
 

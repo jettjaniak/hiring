@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Send Email{% endblock %}
+
+{% block extra_head %}
+<style>
+    .email-send-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 40px 20px;
+    }
+    .form-group {
+        margin-bottom: 25px;
+    }
+    .form-group label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 8px;
+        color: #333;
+    }
+    .form-group select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        background-color: white;
+    }
+    .form-group select:focus {
+        outline: none;
+        border-color: #007bff;
+    }
+    .compose-button {
+        background: #007bff;
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 4px;
+        font-size: 16px;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 10px;
+    }
+    .compose-button:hover {
+        background: #0056b3;
+    }
+    .compose-button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
+    .info-message {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 30px;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="email-send-container">
+    <h2>Send Email</h2>
+
+    <div class="info-message">
+        Select a candidate and an email template to compose your email.
+    </div>
+
+    <div class="form-group">
+        <label for="candidate-select">Candidate</label>
+        <select id="candidate-select" name="candidate">
+            <option value="">-- Select a candidate --</option>
+            {% for candidate in candidates %}
+            <option value="{{ candidate.id }}">
+                {{ candidate.name or 'Unnamed' }}
+                {% if candidate.email %}({{ candidate.email }}){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="template-select">Email Template</label>
+        <select id="template-select" name="template">
+            <option value="">-- Select a template --</option>
+            {% for template in email_templates %}
+            <option value="{{ template.id }}">
+                {{ template.name }}
+                {% if template.description %}- {{ template.description }}{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <button class="compose-button" id="compose-btn" onclick="composeEmail()" disabled>
+        Compose Email
+    </button>
+</div>
+
+<script>
+// Enable/disable compose button based on selections
+function updateComposeButton() {
+    const candidateId = document.getElementById('candidate-select').value;
+    const templateId = document.getElementById('template-select').value;
+    const composeBtn = document.getElementById('compose-btn');
+
+    composeBtn.disabled = !candidateId || !templateId;
+}
+
+// Navigate to compose page
+function composeEmail() {
+    const candidateId = document.getElementById('candidate-select').value;
+    const templateId = document.getElementById('template-select').value;
+
+    if (candidateId && templateId) {
+        window.location.href = `/email/compose/${templateId}?candidate=${candidateId}`;
+    }
+}
+
+// Add event listeners
+document.getElementById('candidate-select').addEventListener('change', updateComposeButton);
+document.getElementById('template-select').addEventListener('change', updateComposeButton);
+</script>
+{% endblock %}

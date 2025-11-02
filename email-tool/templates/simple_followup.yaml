@@ -1,0 +1,27 @@
+name: "Simple Follow-up Email"
+to: "{{candidate.email}}"
+cc: []
+bcc: []
+subject: "Following up - {{candidate.full_name}}"
+
+variables:
+  meeting_date:
+    type: "text"
+    label: "Meeting date"
+    placeholder: "e.g., March 15, 2025"
+  
+  next_steps:
+    type: "choice"
+    label: "Next steps"
+    options:
+      - value: "technical_interview"
+        label: "Schedule technical interview"
+      - value: "reference_check"
+        label: "Reference check"
+      - value: "offer_coming"
+        label: "Offer coming soon"
+  
+  sender_name:
+    type: "text"
+    label: "Your name"
+    default: "Hiring Team"

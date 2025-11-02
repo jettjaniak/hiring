@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Email Template{% endblock %}
+
+{% block extra_head %}
+<!-- TinyMCE -->
+<script src="https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js" referrerpolicy="origin"></script>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>{{ 'Edit' if mode == 'edit' else 'Add' }} Email Template</h2>
+
+    <form method="post" action="{{ '/template/' + template.id + '/edit' if mode == 'edit' else '/template/add' }}" id="templateForm">
+        <div class="form-group">
+            <label for="name">Template Name *</label>
+            <input type="text" id="name" name="name" value="{{ template.name if template else '' }}" required>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Short Description</label>
+            <input type="text" id="description" name="description" value="{{ template.description if template else '' }}" placeholder="Brief description of this template">
+        </div>
+
+        <div class="form-group">
+            <label for="subject">Subject</label>
+            <input type="text" id="subject" name="subject" value="{{ template.subject if template else '' }}" placeholder="Email subject line">
+        </div>
+
+        <div class="form-group">
+            <label for="to">To</label>
+            <input type="text" id="to" name="to" value="{{ template.to if template else '' }}" placeholder="Recipient email addresses">
+        </div>
+
+        <div class="form-group">
+            <label for="cc">CC</label>
+            <input type="text" id="cc" name="cc" value="{{ template.cc if template else '' }}" placeholder="CC email addresses">
+        </div>
+
+        <div class="form-group">
+            <label for="bcc">BCC</label>
+            <input type="text" id="bcc" name="bcc" value="{{ template.bcc if template else '' }}" placeholder="BCC email addresses">
+        </div>
+
+        <div class="form-group">
+            <label for="content">Email Content *</label>
+            <textarea id="content" name="content">{{ template.content if template else '<p>Type your email content here.</p>' }}</textarea>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Variables will be automatically detected from your template. Use {{ "{{variable}}" }} for text variables and {% raw %}{% if variable %}{% endraw %} for booleans.
+                Candidate fields (candidate.name, candidate.email, candidate.phone) are always available.
+            </small>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">{{ 'Save Changes' if mode == 'edit' else 'Create Template' }}</button>
+            <a href="/templates" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+    // TinyMCE initialization
+    tinymce.init({
+        selector: '#content',
+        license_key: 'gpl',
+        plugins: 'lists link code',
+        toolbar: 'bold italic underline | bullist numlist | indent outdent | link hr | code',
+        menubar: false,
+        statusbar: false,
+        height: 400,
+        content_style: 'body { font-family: Arial, sans-serif; font-size: 14px; }',
+        setup: function(editor) {
+            editor.on('change', function() {
+                editor.save();
+            });
+        }
+    });
+
+    // Ensure TinyMCE content is saved before form submission
+    document.getElementById('templateForm').addEventListener('submit', function(e) {
+        tinymce.triggerSave();
+    });
+</script>
+
+{% endblock %}

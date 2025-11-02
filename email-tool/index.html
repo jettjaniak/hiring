@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Template Tool</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="controls">
+        <h2>Email Template Tool</h2>
+        
+        <div class="form-group">
+            <label for="template-select">Template</label>
+            <select id="template-select">
+                <option value="">-- Select Template --</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="candidate-select">Candidate</label>
+            <select id="candidate-select">
+                <option value="">-- Select Candidate --</option>
+            </select>
+        </div>
+        
+        <div id="variable-controls"></div>
+    </div>
+    
+    <div id="preview">
+        <div class="metadata" id="metadata-container">
+            <div class="loading">Select a template and candidate to begin</div>
+        </div>
+        <div id="email-preview">
+            <div class="loading">Email preview will appear here</div>
+        </div>
+        <div class="button-group">
+            <button id="copy-btn" disabled>Copy HTML to Clipboard</button>
+            <button id="mailto-btn" disabled>Open Email & Copy Body</button>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nunjucks/3.2.4/nunjucks.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -14,16 +14,19 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
+import json
 import uuid
 import argparse
 from datetime import datetime, timezone
+from jinja2 import Environment, meta, nodes
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
-from src.models import Candidate, CandidateTask, ActionState
+from src.models import Candidate, CandidateTask, ActionState, EmailTemplate
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
 import os
+import re
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='Hiring Process Web Client')
@@ -603,6 +606,231 @@ def delete_candidate_form(candidate_id: str, session: Session = Depends(get_sess
     session.commit()
 
     return RedirectResponse(url="/", status_code=302)
+
+
+# ============================================================================
+# Email Template Helper Functions
+# ============================================================================
+
+def infer_template_variables(content: str, subject: str = "", to: str = "", cc: str = "", bcc: str = "") -> List[dict]:
+    """
+    Infer variables from template content using Jinja2 AST parsing.
+    Finds variables in {{ }} and determines their type based on usage.
+
+    Returns list of {"name": str, "type": "text"|"boolean"}
+    """
+    env = Environment()
+    all_text = f"{subject} {to} {cc} {bcc} {content}"
+
+    try:
+        ast = env.parse(all_text)
+    except Exception:
+        # If template parsing fails, return empty list
+        return []
+
+    # Find all undeclared variables
+    all_vars = meta.find_undeclared_variables(ast)
+
+    # Find variables used in If conditions (these are booleans)
+    boolean_vars = set()
+
+    def visit_node(node):
+        if isinstance(node, nodes.If):
+            # Extract variable names from If test expression
+            if isinstance(node.test, nodes.Name):
+                boolean_vars.add(node.test.name)
+            elif isinstance(node.test, nodes.Not) and isinstance(node.test.node, nodes.Name):
+                boolean_vars.add(node.test.node.name)
+
+        # Recursively visit child nodes
+        for child in node.iter_child_nodes():
+            visit_node(child)
+
+    visit_node(ast)
+
+    # Filter out variables with dots (like candidate.name) - these are provided by candidate object
+    simple_vars = {var for var in all_vars if '.' not in var and var != 'candidate'}
+
+    # Build result
+    result = []
+    for var in sorted(simple_vars):
+        var_type = "boolean" if var in boolean_vars else "text"
+        result.append({"name": var, "type": var_type})
+
+    return result
+
+
+# ============================================================================
+# Email Template Routes
+# ============================================================================
+
+@app.get("/templates")
+def email_templates_page(request: Request, session: Session = Depends(get_session)):
+    """List all email templates"""
+    statement = select(EmailTemplate).order_by(EmailTemplate.name)
+    email_templates = session.exec(statement).all()
+
+    return templates.TemplateResponse("email_templates.html", {
+        "request": request,
+        "templates": email_templates
+    })
+
+
+@app.get("/template/add")
+def add_email_template_page(request: Request):
+    """Show form to add new email template"""
+    return templates.TemplateResponse("email_template_form.html", {
+        "request": request,
+        "template": None,
+        "mode": "add"
+    })
+
+
+@app.post("/template/add")
+def add_email_template(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    subject: str = Form(""),
+    to: str = Form(""),
+    cc: str = Form(""),
+    bcc: str = Form(""),
+    content: str = Form(...),
+    variables: str = Form(""),
+    session: Session = Depends(get_session)
+):
+    """Create new email template"""
+    # Infer variables from template content
+    inferred_vars = infer_template_variables(content, subject, to, cc, bcc)
+    variables_json = json.dumps(inferred_vars) if inferred_vars else None
+
+    template = EmailTemplate(
+        id=str(uuid.uuid4()),
+        name=name,
+        description=description,
+        subject=subject,
+        to=to,
+        cc=cc,
+        bcc=bcc,
+        content=content,
+        variables=variables_json
+    )
+
+    session.add(template)
+    session.commit()
+
+    return RedirectResponse(url="/templates", status_code=302)
+
+
+@app.get("/template/{template_id}/edit")
+def edit_email_template_page(template_id: str, request: Request, session: Session = Depends(get_session)):
+    """Show form to edit email template"""
+    email_template = session.get(EmailTemplate, template_id)
+    if not email_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    return templates.TemplateResponse("email_template_form.html", {
+        "request": request,
+        "template": email_template,
+        "mode": "edit"
+    })
+
+
+@app.post("/template/{template_id}/edit")
+def edit_email_template(
+    template_id: str,
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    subject: str = Form(""),
+    to: str = Form(""),
+    cc: str = Form(""),
+    bcc: str = Form(""),
+    content: str = Form(...),
+    variables: str = Form(""),
+    session: Session = Depends(get_session)
+):
+    """Update email template"""
+    email_template = session.get(EmailTemplate, template_id)
+    if not email_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Infer variables from template content
+    inferred_vars = infer_template_variables(content, subject, to, cc, bcc)
+    variables_json = json.dumps(inferred_vars) if inferred_vars else None
+
+    email_template.name = name
+    email_template.description = description
+    email_template.subject = subject
+    email_template.to = to
+    email_template.cc = cc
+    email_template.bcc = bcc
+    email_template.content = content
+    email_template.variables = variables_json
+    email_template.updated_at = datetime.now(timezone.utc)
+
+    session.add(email_template)
+    session.commit()
+
+    return RedirectResponse(url="/templates", status_code=302)
+
+
+@app.post("/template/{template_id}/delete")
+def delete_email_template(template_id: str, session: Session = Depends(get_session)):
+    """Delete email template"""
+    email_template = session.get(EmailTemplate, template_id)
+    if not email_template:
+        return RedirectResponse(url="/templates", status_code=302)
+
+    session.delete(email_template)
+    session.commit()
+
+    return RedirectResponse(url="/templates", status_code=302)
+
+
+@app.get("/email/send")
+def email_send_page(request: Request, session: Session = Depends(get_session)):
+    """Page to select candidate and template for composing email"""
+    # Load all candidates and templates
+    candidates_statement = select(Candidate).order_by(Candidate.name)
+    candidates = session.exec(candidates_statement).all()
+
+    templates_statement = select(EmailTemplate).order_by(EmailTemplate.name)
+    email_templates = session.exec(templates_statement).all()
+
+    return templates.TemplateResponse("email_send.html", {
+        "request": request,
+        "candidates": candidates,
+        "email_templates": email_templates
+    })
+
+
+@app.get("/email/compose/{template_id}")
+def compose_email(template_id: str, request: Request, session: Session = Depends(get_session)):
+    """Compose email using template with dynamic variable substitution"""
+    # Load template
+    email_template = session.get(EmailTemplate, template_id)
+    if not email_template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Parse variables from JSON if available
+    variables = []
+    if email_template.variables:
+        try:
+            variables = json.loads(email_template.variables)
+        except json.JSONDecodeError:
+            variables = []
+
+    # Get all candidates for dropdown
+    candidates_statement = select(Candidate).order_by(Candidate.name)
+    candidates = session.exec(candidates_statement).all()
+
+    return templates.TemplateResponse("email_compose.html", {
+        "request": request,
+        "template": email_template,
+        "candidates": candidates,
+        "variables": variables
+    })
 
 
 if __name__ == '__main__':

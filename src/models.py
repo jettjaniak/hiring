@@ -54,3 +54,22 @@ class ActionState(SQLModel, table=True):
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class EmailTemplate(SQLModel, table=True):
+    """Email template for candidate communications"""
+    __tablename__ = "email_templates"
+
+    id: str = Field(primary_key=True)
+    name: str
+    description: Optional[str] = None
+    subject: Optional[str] = None
+    to: Optional[str] = None
+    cc: Optional[str] = None
+    bcc: Optional[str] = None
+    content: str = Field(sa_column=Column(Text))
+    variables: Optional[str] = None  # JSON string: [{"name": "var1", "type": "text"}, {"name": "var2", "type": "boolean"}]
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
