@@ -72,3 +72,16 @@ class EmailTemplate(SQLModel, table=True):
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Task(SQLModel, table=True):
+    """Task definition"""
+    __tablename__ = "tasks"
+
+    task_id: str = Field(primary_key=True)
+    name: str
+    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))

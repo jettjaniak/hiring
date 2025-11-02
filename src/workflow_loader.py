@@ -3,17 +3,19 @@ Load and manage workflow definitions from YAML files
 """
 import yaml
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+from sqlmodel import Session, select
+from .models import Task
 
 
 class WorkflowDefinition:
     """Represents a workflow definition"""
 
-    def __init__(self, data: dict):
+    def __init__(self, data: dict, session: Optional[Session] = None):
         self.id = data['id']
         self.name = data['name']
         self.description = data.get('description', '')
-        self.tasks = [TaskDefinition(t) for t in data.get('tasks', [])]
+        self.tasks = [TaskDefinition(t, session) for t in data.get('tasks', [])]
 
     def get_task_identifiers(self) -> List[str]:
         """Get list of all task identifiers in this workflow"""
@@ -28,23 +30,42 @@ class WorkflowDefinition:
 
 
 class TaskDefinition:
-    """Represents a task definition"""
+    """Represents a task definition loaded from database"""
 
-    def __init__(self, data: dict):
-        self.identifier = data['identifier']
-        self.name = data['name']
-        self.description = data.get('description', '')
+    def __init__(self, data: dict, session: Optional[Session] = None):
+        # Support both old format (with name/description) and new format (task_id only)
+        if 'task_id' in data:
+            # New format: load from database
+            self.identifier = data['task_id']
+            if session:
+                task = session.exec(select(Task).where(Task.task_id == self.identifier)).first()
+                if task:
+                    self.name = task.name
+                    self.description = task.description or ''
+                else:
+                    raise ValueError(f"Task '{self.identifier}' not found in database")
+            else:
+                # No session provided, use placeholder values
+                self.name = self.identifier
+                self.description = ''
+        else:
+            # Old format: use data from YAML
+            self.identifier = data['identifier']
+            self.name = data['name']
+            self.description = data.get('description', '')
+
         self.dependencies = data.get('dependencies', [])
 
 
 class WorkflowLoader:
     """Loads workflow definitions from YAML files"""
 
-    def __init__(self, workflows_dir: str = None):
+    def __init__(self, workflows_dir: str = None, session: Optional[Session] = None):
         if workflows_dir is None:
             # Default to workflows/ directory next to this file
             workflows_dir = Path(__file__).parent / 'workflows'
         self.workflows_dir = Path(workflows_dir)
+        self.session = session
         self.workflows: Dict[str, WorkflowDefinition] = {}
         self._load_workflows()
 
@@ -58,7 +79,7 @@ class WorkflowLoader:
             try:
                 with open(yaml_file, 'r') as f:
                     data = yaml.safe_load(f)
-                    workflow = WorkflowDefinition(data)
+                    workflow = WorkflowDefinition(data, self.session)
                     self.workflows[workflow.id] = workflow
             except Exception as e:
                 print(f"Error loading workflow {yaml_file}: {e}")
