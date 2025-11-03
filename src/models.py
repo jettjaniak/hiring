@@ -94,6 +94,7 @@ class Task(SQLModel, table=True):
     task_id: str = Field(primary_key=True)
     name: str
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    special_action: Optional[str] = None  # Name of the special action view (e.g., "fill_offer_letter")
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))

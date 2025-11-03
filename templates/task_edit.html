@@ -27,6 +27,14 @@
         </div>
 
         <div class="form-group">
+            <label for="special_action">Special Action</label>
+            <input type="text" id="special_action" name="special_action" value="{{ task.special_action if task and task.special_action else '' }}" placeholder="e.g., fill_offer_letter">
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Optional: Enter the name of a code-defined special action (e.g., "fill_offer_letter", "fill_background_check")
+            </small>
+        </div>
+
+        <div class="form-group">
             <label>Link Email Templates</label>
             <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
                 {% if email_templates %}

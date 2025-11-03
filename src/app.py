@@ -728,6 +728,12 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
     ).all()
     task_checklist_map = {c.task_id: c for c in checklists}
 
+    # Get all Task database records to access special_action field
+    db_tasks = session.exec(
+        select(Task).where(Task.task_id.in_(task_identifiers))
+    ).all()
+    task_db_map = {t.task_id: t for t in db_tasks}
+
     layout, max_layer = compute_dag_layout(workflow)
 
     tasks_with_status = []
@@ -742,13 +748,18 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
         # Get linked checklist for this task
         linked_checklist = task_checklist_map.get(task_def.identifier)
 
+        # Get database task record for special_action
+        db_task = task_db_map.get(task_def.identifier)
+        special_action = db_task.special_action if db_task else None
+
         task_info = {
             'definition': task_def,
             'candidate_task': ct,
             'state': state,
             'layout': layout.get(task_def.identifier, {'layer': 0, 'index': 0, 'total_in_layer': 1}),
             'email_templates': linked_templates,
-            'checklist': linked_checklist
+            'checklist': linked_checklist,
+            'special_action': special_action
         }
         tasks_with_status.append(task_info)
 
@@ -1170,6 +1181,7 @@ def add_task(
     task_id: str = Form(...),
     name: str = Form(...),
     description: str = Form(""),
+    special_action: str = Form(""),
     template_ids: List[str] = Form([]),
     session: Session = Depends(get_session)
 ):
@@ -1182,7 +1194,8 @@ def add_task(
     task = Task(
         task_id=task_id,
         name=name,
-        description=description
+        description=description,
+        special_action=special_action if special_action else None
     )
 
     session.add(task)
@@ -1232,6 +1245,7 @@ def edit_task(
     request: Request,
     name: str = Form(...),
     description: str = Form(""),
+    special_action: str = Form(""),
     template_ids: List[str] = Form([]),
     session: Session = Depends(get_session)
 ):
@@ -1242,6 +1256,7 @@ def edit_task(
 
     task.name = name
     task.description = description
+    task.special_action = special_action if special_action else None
     task.updated_at = datetime.now(timezone.utc)
 
     session.add(task)
@@ -1560,6 +1575,163 @@ def save_checklist_api(
 
     session.commit()
     return {"success": True}
+
+
+# ============================================================================
+# Special Actions - Document Generation
+# ============================================================================
+
+@app.get("/action/fill_offer_letter")
+def fill_offer_letter_form(
+    request: Request,
+    candidate: str,
+    task: str,
+    session: Session = Depends(get_session)
+):
+    """Form to fill offer letter for a candidate"""
+    from src.document_generator import extract_placeholders_from_docx
+
+    # Get candidate
+    cand = session.get(Candidate, candidate)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Extract required fields from template
+    try:
+        placeholders = extract_placeholders_from_docx("offer_letter_template.docx")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Template file not found")
+
+    # Pre-fill some fields from candidate data
+    prefilled = {
+        "CANDIDATE_NAME": cand.name or "",
+        "CANDIDATE_EMAIL": cand.email or "",
+    }
+
+    return templates.TemplateResponse("action_offer_letter.html", {
+        "request": request,
+        "candidate": cand,
+        "task_id": task,
+        "placeholders": placeholders,
+        "prefilled": prefilled
+    })
+
+
+@app.post("/action/fill_offer_letter")
+async def generate_offer_letter(
+    request: Request,
+    candidate: str = Form(...),
+    task: str = Form(...),
+    session: Session = Depends(get_session)
+):
+    """Generate and download filled offer letter"""
+    from src.document_generator import fill_docx_template
+    from fastapi.responses import StreamingResponse
+
+    # Get candidate
+    cand = session.get(Candidate, candidate)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Get all form fields
+    form_data = await request.form()
+
+    # Build replacements dictionary
+    replacements = {}
+    for key, value in form_data.items():
+        if key not in ["candidate", "task"] and value:
+            replacements[f"{{{{{key}}}}}"] = value
+
+    # Generate document
+    try:
+        doc_bytes = fill_docx_template("offer_letter_template.docx", replacements)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate document: {str(e)}")
+
+    # Return as downloadable file
+    filename = f"offer_letter_{cand.name.replace(' ', '_') if cand.name else cand.email}.docx"
+    return StreamingResponse(
+        doc_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/action/fill_background_check")
+def fill_background_check_form(
+    request: Request,
+    candidate: str,
+    task: str,
+    session: Session = Depends(get_session)
+):
+    """Form to fill background check for a candidate"""
+    from src.document_generator import extract_placeholders_from_xlsx
+
+    # Get candidate
+    cand = session.get(Candidate, candidate)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Extract required fields from template
+    try:
+        placeholders = extract_placeholders_from_xlsx("background_check_template.xlsx")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="Template file not found")
+
+    # Pre-fill some fields from candidate data
+    prefilled = {
+        "CANDIDATE_NAME": cand.name or "",
+        "CANDIDATE_EMAIL": cand.email or "",
+        "CANDIDATE_PHONE": cand.phone or "",
+    }
+
+    return templates.TemplateResponse("action_background_check.html", {
+        "request": request,
+        "candidate": cand,
+        "task_id": task,
+        "placeholders": placeholders,
+        "prefilled": prefilled
+    })
+
+
+@app.post("/action/fill_background_check")
+async def generate_background_check(
+    request: Request,
+    candidate: str = Form(...),
+    task: str = Form(...),
+    session: Session = Depends(get_session)
+):
+    """Generate and download filled background check"""
+    from src.document_generator import fill_xlsx_template
+    from fastapi.responses import StreamingResponse
+
+    # Get candidate
+    cand = session.get(Candidate, candidate)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Get all form fields
+    form_data = await request.form()
+
+    # Build replacements dictionary
+    replacements = {}
+    for key, value in form_data.items():
+        if key not in ["candidate", "task"] and value:
+            replacements[f"{{{{{key}}}}}"] = value
+
+    # Generate document
+    try:
+        doc_bytes = fill_xlsx_template("background_check_template.xlsx", replacements)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate document: {str(e)}")
+
+    # Return as downloadable file
+    filename = f"background_check_{cand.name.replace(' ', '_') if cand.name else cand.email}.xlsx"
+    return StreamingResponse(
+        doc_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 if __name__ == '__main__':

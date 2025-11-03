@@ -44,7 +44,7 @@
                         <option value="na" {% if task_info.state == 'na' %}selected{% endif %}>N/A</option>
                     </select>
 
-                    {% if task_info.email_templates or task_info.checklist %}
+                    {% if task_info.email_templates or task_info.checklist or task_info.special_action %}
                     <div style="margin-top: 8px; position: relative;">
                         <button type="button" class="btn btn-sm" onclick="toggleMenu('menu-{{ task_info.definition.identifier }}')" style="background-color: #4CAF50; color: white;">
                             Actions
@@ -64,6 +64,12 @@
                                 {% if task_info.checklist.description %}
                                 <br><small style="color: #666;">{{ task_info.checklist.description }}</small>
                                 {% endif %}
+                            </a>
+                            {% endif %}
+                            {% if task_info.special_action %}
+                            <a href="/action/{{ task_info.special_action }}?candidate={{ candidate.email|urlencode }}&task={{ task_info.definition.identifier|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333;">
+                                <strong>{{ task_info.special_action.replace('_', ' ').title() }}</strong>
+                                <br><small style="color: #666;">Special action</small>
                             </a>
                             {% endif %}
                         </div>

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Fill Background Check{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h2>Fill Background Check for {{ candidate.name or candidate.email }}</h2>
+
+    <form method="post" action="/action/fill_background_check">
+        <input type="hidden" name="candidate" value="{{ candidate.email }}">
+        <input type="hidden" name="task" value="{{ task_id }}">
+
+        <p>Fill in the required fields to generate the background check spreadsheet:</p>
+
+        {% for placeholder in placeholders %}
+        <div class="form-group">
+            <label for="{{ placeholder }}">{{ placeholder }}</label>
+            <input type="text"
+                   id="{{ placeholder }}"
+                   name="{{ placeholder }}"
+                   value="{{ prefilled.get(placeholder, '') }}"
+                   placeholder="{{ placeholder }}">
+        </div>
+        {% endfor %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Generate & Download</button>
+            <a href="/candidate/{{ candidate.email }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
