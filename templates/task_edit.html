@@ -28,9 +28,13 @@
 
         <div class="form-group">
             <label for="special_action">Special Action</label>
-            <input type="text" id="special_action" name="special_action" value="{{ task.special_action if task and task.special_action else '' }}" placeholder="e.g., fill_offer_letter">
+            <select id="special_action" name="special_action">
+                <option value="" {% if not task or not task.special_action %}selected{% endif %}>None</option>
+                <option value="fill_offer_letter" {% if task and task.special_action == 'fill_offer_letter' %}selected{% endif %}>Fill Offer Letter</option>
+                <option value="fill_background_check" {% if task and task.special_action == 'fill_background_check' %}selected{% endif %}>Fill Background Check</option>
+            </select>
             <small style="display: block; margin-top: 5px; color: #666;">
-                Optional: Enter the name of a code-defined special action (e.g., "fill_offer_letter", "fill_background_check")
+                Optional: Select a special action to link with this task
             </small>
         </div>
 
