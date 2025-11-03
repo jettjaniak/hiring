@@ -147,6 +147,71 @@ When extending this application:
 - Check that the database is being queried correctly
 - Don't assume code that looks correct will work correctly
 
+## Standard Development Workflow
+
+When implementing any new feature or change, follow this process:
+
+### 1. Implement
+- Write the code changes needed
+- Update models, endpoints, templates, etc.
+
+### 2. Extend Tests
+- Add or update tests in `tests/` to cover the new functionality
+- Ensure edge cases are covered
+
+### 3. Run Tests
+```bash
+./venv/bin/pytest tests/ -v
+```
+- All tests must pass before proceeding
+- Fix any failing tests
+
+### 4. Manual Testing on localhost:8000
+**CRITICAL: Do not skip this step**
+
+a) **Check server status:**
+```bash
+# Check if server is running
+curl http://localhost:8000/ -I
+```
+
+b) **Restart server if needed:**
+```bash
+./restart_server.sh
+```
+
+c) **Send manual test requests:**
+```bash
+# Test the specific endpoint you changed
+curl -X GET http://localhost:8000/your-endpoint
+curl -X POST http://localhost:8000/your-endpoint -H "Content-Type: application/json" -d '{"test":"data"}'
+```
+
+d) **Verify in browser:**
+- Open http://localhost:8000 in a browser
+- Navigate to the feature you implemented
+- Test all user flows and interactions
+- Check browser console for JavaScript errors
+- Verify database changes took effect
+
+e) **Check server logs:**
+- Look for any errors or warnings in the server output
+- Verify expected log messages appear
+
+### 5. Verify & Report
+Only after completing steps 1-4:
+- Confirm to the user that the feature is working
+- Provide specific evidence (test results, curl output, etc.)
+- Note any issues or limitations discovered during testing
+
+**Common failure modes to check:**
+- Server crashes on startup
+- 404/500 errors when accessing endpoints
+- Database schema mismatches
+- Template rendering errors
+- Missing imports or dependencies
+- JavaScript errors in browser console
+
 ## Testing Notes
 
 ### Email Compose Dropdown Implementation (2025-11-02)
