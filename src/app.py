@@ -825,7 +825,7 @@ def get_template_tasks(template_id: str, session: Session = Depends(get_session)
     # Get the actual tasks
     if task_ids:
         tasks = session.exec(
-            select(TaskTemplate).where(Task.task_id.in_(task_ids))
+            select(TaskTemplate).where(TaskTemplate.task_id.in_(task_ids))
         ).all()
     else:
         tasks = []
