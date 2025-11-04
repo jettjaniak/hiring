@@ -145,7 +145,14 @@ class TestAPITasks:
 
     def test_create_task(self, test_app):
         """Test creating a task for a candidate"""
-        # Create a candidate first
+        # Create a task template first
+        test_app.post("/api/task-templates", params={
+            "task_id": "resume_screen",
+            "name": "Resume Screen",
+            "description": "Screen candidate resume"
+        })
+
+        # Create a candidate
         create_response = test_app.post("/api/candidates", params={
             "name": "Task Tester",
             "email": "task@example.com",
@@ -154,18 +161,29 @@ class TestAPITasks:
         assert create_response.status_code == 201
         candidate_email = create_response.json()["email"]
 
-        # Create a task
-        response = test_app.put(
-            f"/api/candidates/{candidate_email}/tasks/resume_screen",
-            params={"status": "in_progress"}
+        # Create a task from template
+        response = test_app.post(
+            f"/api/candidates/{candidate_email}/tasks/resume_screen"
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
-        assert data["task_identifier"] == "resume_screen"
-        assert data["status"] == "in_progress"
+        assert data["template_id"] == "resume_screen"
+        assert data["status"] == "todo"
 
     def test_list_tasks(self, test_app):
         """Test listing tasks for a candidate"""
+        # Create task templates
+        test_app.post("/api/task-templates", params={
+            "task_id": "task1",
+            "name": "Task 1",
+            "description": "First task"
+        })
+        test_app.post("/api/task-templates", params={
+            "task_id": "task2",
+            "name": "Task 2",
+            "description": "Second task"
+        })
+
         # Create a candidate
         create_response = test_app.post("/api/candidates", params={
             "workflow_id": "senior_engineer_v2",
@@ -175,26 +193,27 @@ class TestAPITasks:
         assert create_response.status_code == 201
         candidate_email = create_response.json()["email"]
 
-        # Create tasks
-        test_app.put(
-            f"/api/candidates/{candidate_email}/tasks/task1",
-            params={"status": "completed"}
-        )
-        test_app.put(
-            f"/api/candidates/{candidate_email}/tasks/task2",
-            params={"status": "not_started"}
-        )
+        # Create tasks from templates
+        test_app.post(f"/api/candidates/{candidate_email}/tasks/task1")
+        test_app.post(f"/api/candidates/{candidate_email}/tasks/task2")
 
         # List tasks
         response = test_app.get(f"/api/candidates/{candidate_email}/tasks")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 2
-        assert any(t["task_identifier"] == "task1" for t in data)
-        assert any(t["task_identifier"] == "task2" for t in data)
+        assert any(t["template_id"] == "task1" for t in data)
+        assert any(t["template_id"] == "task2" for t in data)
 
     def test_update_task_status(self, test_app):
         """Test updating a task status"""
+        # Create task template
+        test_app.post("/api/task-templates", params={
+            "task_id": "test_task",
+            "name": "Test Task",
+            "description": "A test task"
+        })
+
         # Create candidate
         create_response = test_app.post("/api/candidates", params={
             "workflow_id": "senior_engineer_v2",
@@ -204,11 +223,8 @@ class TestAPITasks:
         assert create_response.status_code == 201
         candidate_email = create_response.json()["email"]
 
-        # Create task
-        test_app.put(
-            f"/api/candidates/{candidate_email}/tasks/test_task",
-            params={"status": "not_started"}
-        )
+        # Create task from template
+        test_app.post(f"/api/candidates/{candidate_email}/tasks/test_task")
 
         # Update status
         response = test_app.put(
@@ -221,6 +237,13 @@ class TestAPITasks:
 
     def test_delete_task(self, test_app):
         """Test deleting a task"""
+        # Create task template
+        test_app.post("/api/task-templates", params={
+            "task_id": "delete_me",
+            "name": "Delete Me Task",
+            "description": "Task to be deleted"
+        })
+
         # Create candidate
         create_response = test_app.post("/api/candidates", params={
             "workflow_id": "senior_engineer_v2",
@@ -230,11 +253,8 @@ class TestAPITasks:
         assert create_response.status_code == 201
         candidate_email = create_response.json()["email"]
 
-        # Create task
-        test_app.put(
-            f"/api/candidates/{candidate_email}/tasks/delete_me",
-            params={"status": "not_started"}
-        )
+        # Create task from template
+        test_app.post(f"/api/candidates/{candidate_email}/tasks/delete_me")
 
         # Delete task
         response = test_app.delete(f"/api/candidates/{candidate_email}/tasks/delete_me")
@@ -632,7 +652,7 @@ class TestTaskTemplateWebForms:
         with db.get_session() as session:
             link = session.exec(
                 select(EmailTemplateTask).where(
-                    EmailTemplateTask.task_id == "send_welcome",
+                    EmailTemplateTask.task_template_id == "send_welcome",
                     EmailTemplateTask.email_template_id == template_ids[0]
                 )
             ).first()
@@ -681,7 +701,7 @@ class TestTaskTemplateWebForms:
         with db.get_session() as session:
             link = session.exec(
                 select(EmailTemplateTask).where(
-                    EmailTemplateTask.task_id == "schedule_interview",
+                    EmailTemplateTask.task_template_id == "schedule_interview",
                     EmailTemplateTask.email_template_id == template_id
                 )
             ).first()
@@ -722,7 +742,7 @@ class TestTaskTemplateWebForms:
             template = session.exec(select(EmailTemplate).where(EmailTemplate.name == "Screening Email")).first()
             link = session.exec(
                 select(EmailTemplateTask).where(
-                    EmailTemplateTask.task_id == "screen_resume",
+                    EmailTemplateTask.task_template_id == "screen_resume",
                     EmailTemplateTask.email_template_id == template.id
                 )
             ).first()

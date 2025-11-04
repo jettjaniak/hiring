@@ -5,7 +5,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, TYPE_CHECKING
 from sqlmodel import Session, select
-from .models import Task
+from .models import TaskTemplate
 
 if TYPE_CHECKING:
     from .database import Database
@@ -48,12 +48,12 @@ class TaskDefinition:
             # New format: load from database
             self.identifier = data['task_id']
             if session:
-                task = session.exec(select(Task).where(Task.task_id == self.identifier)).first()
-                if task:
-                    self.name = task.name
-                    self.description = task.description or ''
+                task_template = session.exec(select(TaskTemplate).where(TaskTemplate.task_id == self.identifier)).first()
+                if task_template:
+                    self.name = task_template.name
+                    self.description = task_template.description or ''
                 else:
-                    raise ValueError(f"Task '{self.identifier}' not found in database")
+                    raise ValueError(f"Task template '{self.identifier}' not found in database")
             else:
                 # No session provided, use placeholder values
                 self.name = self.identifier

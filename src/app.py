@@ -336,7 +336,7 @@ def get_candidate_task(
     return task
 
 
-@app.post("/api/candidates/{candidate_email}/tasks/{task_identifier}")
+@app.post("/api/candidates/{candidate_email}/tasks/{task_identifier}", status_code=201)
 def create_candidate_task(
     candidate_email: str,
     task_identifier: str,
@@ -737,7 +737,7 @@ def get_task_templates(task_id: str, session: Session = Depends(get_session)):
 
     # Get all template IDs linked to this task
     links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_id == task_id)
+        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task_id)
     ).all()
 
     template_ids = [link.email_template_id for link in links]
@@ -767,7 +767,7 @@ def link_template_to_task(task_id: str, template_id: str, session: Session = Dep
     # Check if link already exists
     existing_link = session.exec(
         select(EmailTemplateTask).where(
-            EmailTemplateTask.task_id == task_id,
+            EmailTemplateTask.task_template_id == task_id,
             EmailTemplateTask.email_template_id == template_id
         )
     ).first()
@@ -777,7 +777,7 @@ def link_template_to_task(task_id: str, template_id: str, session: Session = Dep
 
     # Create new link
     link = EmailTemplateTask(
-        task_id=task_id,
+        task_template_id=task_id,
         email_template_id=template_id
     )
     session.add(link)
@@ -791,7 +791,7 @@ def unlink_template_from_task(task_id: str, template_id: str, session: Session =
     """Unlink a template from a task"""
     link = session.exec(
         select(EmailTemplateTask).where(
-            EmailTemplateTask.task_id == task_id,
+            EmailTemplateTask.task_template_id == task_id,
             EmailTemplateTask.email_template_id == template_id
         )
     ).first()
@@ -843,7 +843,7 @@ def link_task_to_template(template_id: str, task_id: str, session: Session = Dep
     # Check if link already exists
     existing_link = session.exec(
         select(EmailTemplateTask).where(
-            EmailTemplateTask.task_id == task_id,
+            EmailTemplateTask.task_template_id == task_id,
             EmailTemplateTask.email_template_id == template_id
         )
     ).first()
@@ -853,7 +853,7 @@ def link_task_to_template(template_id: str, task_id: str, session: Session = Dep
 
     # Create new link
     link = EmailTemplateTask(
-        task_id=task_id,
+        task_template_id=task_id,
         email_template_id=template_id
     )
     session.add(link)
@@ -867,7 +867,7 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
     """Unlink a task from a template"""
     link = session.exec(
         select(EmailTemplateTask).where(
-            EmailTemplateTask.task_id == task_id,
+            EmailTemplateTask.task_template_id == task_id,
             EmailTemplateTask.email_template_id == template_id
         )
     ).first()
@@ -1437,7 +1437,7 @@ def add_email_template(
         for task_id in task_ids:
             link = EmailTemplateTask(
                 email_template_id=template.id,
-                task_id=task_id
+                task_template_id=task_id
             )
             session.add(link)
         session.commit()
@@ -1521,7 +1521,7 @@ def edit_email_template(
         for task_id in task_ids:
             link = EmailTemplateTask(
                 email_template_id=template_id,
-                task_id=task_id
+                task_template_id=task_id
             )
             session.add(link)
         session.commit()
@@ -1664,7 +1664,7 @@ def add_task(
     if template_ids:
         for template_id in template_ids:
             link = EmailTemplateTask(
-                task_id=task_id,
+                task_template_id=task_id,
                 email_template_id=template_id
             )
             session.add(link)
@@ -1685,7 +1685,7 @@ def edit_task_page(task_id: str, request: Request, session: Session = Depends(ge
 
     # Get currently linked templates
     links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_id == task_id)
+        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task_id)
     ).all()
     linked_template_ids = [link.email_template_id for link in links]
 
@@ -1724,7 +1724,7 @@ def edit_task(
     # Update template links
     # First, remove all existing links
     existing_links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_id == task_id)
+        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task_id)
     ).all()
     for link in existing_links:
         session.delete(link)
@@ -1734,7 +1734,7 @@ def edit_task(
     if template_ids:
         for template_id in template_ids:
             link = EmailTemplateTask(
-                task_id=task_id,
+                task_template_id=task_id,
                 email_template_id=template_id
             )
             session.add(link)
