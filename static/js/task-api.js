@@ -46,8 +46,8 @@ function restoreScrollPosition() {
  */
 async function createTask(candidateId, taskIdentifier) {
     try {
-        const response = await fetch(`/api/candidates/${candidateId}/tasks/${taskIdentifier}?status=not_started`, {
-            method: 'PUT',
+        const response = await fetch(`/api/candidates/${candidateId}/tasks/${taskIdentifier}`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             }

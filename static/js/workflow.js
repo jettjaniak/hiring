@@ -19,9 +19,8 @@ function layoutDAG() {
     const taskStates = new Map();
     taskCards.forEach(card => {
         const taskId = card.dataset.taskId;
-        const state = card.classList.contains('na') ? 'na' :
-                     card.classList.contains('completed') ? 'completed' :
-                     card.classList.contains('in_progress') ? 'in_progress' : 'not_started';
+        const state = card.classList.contains('done') ? 'done' :
+                     card.classList.contains('in_progress') ? 'in_progress' : 'todo';
         taskStates.set(taskId, state);
     });
 
@@ -48,7 +47,7 @@ function layoutDAG() {
             const depIds = deps.split(',').filter(d => d.trim() !== '');
             const allDepsCompleted = depIds.every(depId => {
                 const depState = taskStates.get(depId);
-                return depState === 'completed' || depState === 'na';
+                return depState === 'done';
             });
 
             if (!allDepsCompleted) {
@@ -104,7 +103,7 @@ function layoutDAG() {
                     const depState = taskStates.get(depId);
                     let strokeColor, markerUrl;
 
-                    if (depState === 'completed' || depState === 'na') {
+                    if (depState === 'done') {
                         strokeColor = '#28a745';
                         markerUrl = 'url(#arrowhead-green)';
                     } else if (depState === 'in_progress') {

@@ -3,10 +3,9 @@
 {% if exists %}
 <select class="table-status-select"
         onchange="updateTaskStatus('{{ candidate_id }}', '{{ task_identifier }}', this)">
-    <option value="not_started" {% if state == 'not_started' %}selected{% endif %}>Not Started</option>
+    <option value="todo" {% if state == 'todo' %}selected{% endif %}>To Do</option>
     <option value="in_progress" {% if state == 'in_progress' %}selected{% endif %}>In Progress</option>
-    <option value="completed" {% if state == 'completed' %}selected{% endif %}>Completed</option>
-    <option value="na" {% if state == 'na' %}selected{% endif %}>N/A</option>
+    <option value="done" {% if state == 'done' %}selected{% endif %}>Done</option>
 </select>
 {% else %}
 <button class="btn btn-sm" onclick="createTask('{{ candidate_id }}', '{{ task_identifier }}')">Create</button>

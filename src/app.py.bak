@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from jinja2 import Environment, meta, nodes
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
-from src.models import Candidate, EmailTemplate, TaskTemplate, EmailTemplateTask, Checklist, CandidateChecklistState, Task, TaskCandidateLink
+from src.models import Candidate, CandidateTask, EmailTemplate, Task, EmailTemplateTask, Checklist, CandidateChecklistState, SpawnedTask, TaskCandidateLink
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -69,8 +69,28 @@ def get_session():
 
 def ensure_workflow_tasks(candidate_id: str, workflow_id: str, session: Session):
     """Ensure all workflow tasks exist for candidate"""
-    # PHASE 6 TODO: Remove auto-creation - users will create tasks manually
-    pass
+    workflow = workflow_loader.get_workflow(workflow_id)
+    if not workflow:
+        return
+
+    for task_def in workflow.tasks:
+        # Check if task exists
+        existing = session.exec(
+            select(CandidateTask).where(
+                CandidateTask.candidate_id == candidate_id,
+                CandidateTask.task_identifier == task_def.identifier
+            )
+        ).first()
+
+        if not existing:
+            # Create task with default status
+            new_task = CandidateTask(
+                candidate_id=candidate_id,
+                task_identifier=task_def.identifier,
+                status="not_started"
+            )
+            session.add(new_task)
+    session.commit()
 
 
 # REST API Endpoints - Auto-generated from SQLModel
@@ -167,11 +187,11 @@ def delete_candidate(candidate_id: str, session: Session = Depends(get_session))
     return None
 
 
-# TaskTemplate API Endpoints
-@app.get("/api/task-templates", response_model=List[TaskTemplate])
+# Task API Endpoints
+@app.get("/api/tasks", response_model=List[Task])
 def list_tasks(session: Session = Depends(get_session)):
     """List all tasks"""
-    tasks = session.exec(select(TaskTemplate)).all()
+    tasks = session.exec(select(Task)).all()
     return tasks
 
 
@@ -179,7 +199,7 @@ def list_tasks(session: Session = Depends(get_session)):
 @app.get("/api/tasks/kanban")
 def get_kanban_data(session: Session = Depends(get_session)):
     """Get tasks grouped by status for kanban view"""
-    tasks = session.exec(select(Task)).all()
+    tasks = session.exec(select(SpawnedTask)).all()
 
     # Group tasks by status
     kanban_data = {
@@ -230,16 +250,16 @@ def view_kanban(request: Request, session: Session = Depends(get_session)):
     )
 
 
-@app.get("/api/task-templates/{task_id}", response_model=TaskTemplate)
+@app.get("/api/tasks/{task_id}", response_model=Task)
 def get_task(task_id: str, session: Session = Depends(get_session)):
     """Get a specific task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     return task
 
 
-@app.post("/api/task-templates", response_model=TaskTemplate, status_code=201)
+@app.post("/api/tasks", response_model=Task, status_code=201)
 def create_task(
     task_id: str,
     name: str,
@@ -248,11 +268,11 @@ def create_task(
 ):
     """Create a new task"""
     # Check if task already exists
-    existing_task = session.get(TaskTemplate, task_id)
+    existing_task = session.get(Task, task_id)
     if existing_task:
         raise HTTPException(status_code=400, detail=f"Task {task_id} already exists")
 
-    task = TaskTemplate(
+    task = Task(
         task_id=task_id,
         name=name,
         description=description
@@ -263,7 +283,7 @@ def create_task(
     return task
 
 
-@app.put("/api/task-templates/{task_id}", response_model=TaskTemplate)
+@app.put("/api/tasks/{task_id}", response_model=Task)
 def update_task(
     task_id: str,
     name: Optional[str] = None,
@@ -271,7 +291,7 @@ def update_task(
     session: Session = Depends(get_session)
 ):
     """Update a task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -287,10 +307,10 @@ def update_task(
     return task
 
 
-@app.delete("/api/task-templates/{task_id}", status_code=204)
+@app.delete("/api/tasks/{task_id}", status_code=204)
 def delete_task(task_id: str, session: Session = Depends(get_session)):
     """Delete a task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -299,147 +319,96 @@ def delete_task(task_id: str, session: Session = Depends(get_session)):
     return None
 
 
-# ============================================================================
-# Candidate Task Creation Endpoints (Phase 4)
-# ============================================================================
-
-@app.get("/api/candidates/{candidate_email}/tasks")
-def list_candidate_tasks(
-    candidate_email: str,
-    session: Session = Depends(get_session)
-):
-    """List all Task instances for a specific candidate"""
-    # Verify candidate exists
-    candidate = session.exec(
-        select(Candidate).where(Candidate.email == candidate_email)
-    ).first()
+@app.get("/api/candidates/{candidate_id}/tasks", response_model=List[CandidateTask])
+def list_candidate_tasks(candidate_id: str, session: Session = Depends(get_session)):
+    """List all tasks for a candidate"""
+    candidate = session.get(Candidate, candidate_id)
     if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
 
-    # Get all tasks for this candidate via TaskCandidateLink
-    task_links = session.exec(
-        select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate_email)
-    ).all()
-    task_ids = [link.task_id for link in task_links]
-
-    tasks = []
-    if task_ids:
-        tasks = session.exec(
-            select(Task).where(Task.id.in_(task_ids))
-        ).all()
-
+    tasks = session.exec(select(CandidateTask).where(CandidateTask.candidate_id == candidate_id)).all()
     return tasks
 
 
-@app.get("/api/candidates/{candidate_email}/tasks/{task_identifier}")
-def get_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    session: Session = Depends(get_session)
-):
-    """Get a specific Task instance for a candidate by task template identifier"""
-    # Get the task
+@app.get("/api/candidates/{candidate_id}/tasks/{task_identifier}", response_model=CandidateTask)
+def get_candidate_task(candidate_id: str, task_identifier: str, session: Session = Depends(get_session)):
+    """Get a specific task for a candidate"""
+    candidate = session.get(Candidate, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+
     task = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
+        select(CandidateTask).where(
+            CandidateTask.candidate_id == candidate_id,
+            CandidateTask.task_identifier == task_identifier
         )
     ).first()
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail=f"Task {task_identifier} not found for candidate {candidate_id}")
 
     return task
 
 
-@app.post("/api/candidates/{candidate_email}/tasks/{task_identifier}")
-def create_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    session: Session = Depends(get_session)
-):
-    """Create a Task instance from a TaskTemplate for a specific candidate"""
-    # Get candidate
-    candidate = session.exec(
-        select(Candidate).where(Candidate.email == candidate_email)
-    ).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    # Get TaskTemplate by identifier
-    task_template = session.exec(
-        select(TaskTemplate).where(TaskTemplate.task_id == task_identifier)
-    ).first()
-    if not task_template:
-        raise HTTPException(status_code=404, detail="Task template not found")
-
-    # Check if task already exists for this candidate
-    existing_tasks = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
-        )
-    ).all()
-    if existing_tasks:
-        raise HTTPException(status_code=400, detail="Task already exists for this candidate")
-
-    # Create Task instance from template
-    new_task = Task(
-        title=task_template.name,
-        description=task_template.description,
-        template_id=task_template.task_id,
-        status="todo",
-        workflow_id=candidate.workflow_id
-    )
-    session.add(new_task)
-    session.flush()  # Flush to get the auto-generated ID
-
-    # Link to candidate
-    link = TaskCandidateLink(
-        task_id=new_task.id,
-        candidate_email=candidate.email
-    )
-    session.add(link)
-    session.commit()
-    session.refresh(new_task)
-
-    return new_task
-
-
-@app.put("/api/candidates/{candidate_email}/tasks/{task_identifier}")
+@app.put("/api/candidates/{candidate_id}/tasks/{task_identifier}", response_model=CandidateTask)
 def update_candidate_task(
-    candidate_email: str,
+    candidate_id: str,
     task_identifier: str,
-    status: Optional[str] = None,
-    assignee: Optional[str] = None,
-    notes: Optional[str] = None,
+    status: str,
     session: Session = Depends(get_session)
 ):
-    """Update a Task instance for a specific candidate"""
-    # Get the task
+    """Update or create a task for a candidate"""
+    candidate = session.get(Candidate, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+
+    if status not in ['not_started', 'in_progress', 'completed', 'na']:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be one of: not_started, in_progress, completed, na")
+
     task = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
+        select(CandidateTask).where(
+            CandidateTask.candidate_id == candidate_id,
+            CandidateTask.task_identifier == task_identifier
         )
     ).first()
 
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Update fields if provided
-    if status is not None:
+        task = CandidateTask(
+            candidate_id=candidate_id,
+            task_identifier=task_identifier,
+            status=status
+        )
+        session.add(task)
+    else:
         task.status = status
-    if assignee is not None:
-        task.assignee = assignee
-    if notes is not None:
-        task.notes = notes
+        task.updated_at = datetime.now(timezone.utc)
+        session.add(task)
 
-    session.add(task)
     session.commit()
     session.refresh(task)
-
     return task
+
+
+@app.delete("/api/candidates/{candidate_id}/tasks/{task_identifier}", status_code=204)
+def delete_candidate_task(candidate_id: str, task_identifier: str, session: Session = Depends(get_session)):
+    """Delete a task for a candidate"""
+    candidate = session.get(Candidate, candidate_id)
+    if not candidate:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
+
+    task = session.exec(
+        select(CandidateTask).where(
+            CandidateTask.candidate_id == candidate_id,
+            CandidateTask.task_identifier == task_identifier
+        )
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_identifier} not found for candidate {candidate_id}")
+
+    session.delete(task)
+    session.commit()
+    return None
 
 
 # ============================================================================
@@ -454,7 +423,7 @@ class SpawnTaskRequest(BaseModel):
     description: Optional[str] = None
 
 
-class CreateTaskRequest(BaseModel):
+class CreateSpawnedTaskRequest(BaseModel):
     title: str
     description: Optional[str] = None
     status: Optional[str] = "todo"
@@ -462,7 +431,7 @@ class CreateTaskRequest(BaseModel):
     candidate_emails: List[str] = []
 
 
-class UpdateTaskRequest(BaseModel):
+class UpdateSpawnedTaskRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
@@ -472,7 +441,7 @@ class AddCandidatesRequest(BaseModel):
     candidate_emails: List[str]
 
 
-@app.post("/api/task-templates/spawn", response_model=Task, status_code=201)
+@app.post("/api/tasks/spawn", response_model=SpawnedTask, status_code=201)
 def spawn_task(
     request: SpawnTaskRequest,
     session: Session = Depends(get_session)
@@ -482,7 +451,7 @@ def spawn_task(
     If the same template has already been spawned for a candidate, returns the existing task.
     """
     # Validate template exists
-    template = session.get(TaskTemplate, request.template_id)
+    template = session.get(Task, request.template_id)
     if not template:
         raise HTTPException(status_code=404, detail=f"Template {request.template_id} not found")
 
@@ -507,7 +476,7 @@ def spawn_task(
     if existing_links:
         # Check if any of these links point to a task with the same template_id
         for link in existing_links:
-            spawned_task = session.get(Task, link.task_id)
+            spawned_task = session.get(SpawnedTask, link.task_id)
             if spawned_task and spawned_task.template_id == request.template_id:
                 # Found existing task with same template for at least one candidate
                 # Return it (duplicate prevention)
@@ -517,7 +486,7 @@ def spawn_task(
     title = request.title or template.name
     description = request.description or template.description
 
-    spawned_task = Task(
+    spawned_task = SpawnedTask(
         title=title,
         description=description,
         status="todo",
@@ -541,7 +510,7 @@ def spawn_task(
     return spawned_task
 
 
-@app.get("/api/tasks", response_model=List[Task])
+@app.get("/api/spawned-tasks", response_model=List[SpawnedTask])
 def list_spawned_tasks(
     status: Optional[str] = None,
     workflow_id: Optional[str] = None,
@@ -549,31 +518,31 @@ def list_spawned_tasks(
     session: Session = Depends(get_session)
 ):
     """List all spawned tasks with optional filters"""
-    query = select(Task)
+    query = select(SpawnedTask)
 
     if status:
-        query = query.where(Task.status == status)
+        query = query.where(SpawnedTask.status == status)
     if workflow_id:
-        query = query.where(Task.workflow_id == workflow_id)
+        query = query.where(SpawnedTask.workflow_id == workflow_id)
     if template_id:
-        query = query.where(Task.template_id == template_id)
+        query = query.where(SpawnedTask.template_id == template_id)
 
     tasks = session.exec(query).all()
     return tasks
 
 
-@app.get("/api/tasks/{task_id}", response_model=Task)
+@app.get("/api/spawned-tasks/{task_id}", response_model=SpawnedTask)
 def get_spawned_task(task_id: int, session: Session = Depends(get_session)):
     """Get a specific spawned task by ID"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
     return task
 
 
-@app.post("/api/tasks", response_model=Task, status_code=201)
+@app.post("/api/spawned-tasks", response_model=SpawnedTask, status_code=201)
 def create_spawned_task(
-    request: CreateTaskRequest,
+    request: CreateSpawnedTaskRequest,
     session: Session = Depends(get_session)
 ):
     """Create a new ad-hoc spawned task (not from template)"""
@@ -588,7 +557,7 @@ def create_spawned_task(
             raise HTTPException(status_code=404, detail=f"Candidate {email} not found")
 
     # Create spawned task
-    spawned_task = Task(
+    spawned_task = SpawnedTask(
         title=request.title,
         description=request.description,
         status=request.status,
@@ -611,14 +580,14 @@ def create_spawned_task(
     return spawned_task
 
 
-@app.put("/api/tasks/{task_id}", response_model=Task)
+@app.put("/api/spawned-tasks/{task_id}", response_model=SpawnedTask)
 def update_spawned_task(
     task_id: int,
-    request: UpdateTaskRequest,
+    request: UpdateSpawnedTaskRequest,
     session: Session = Depends(get_session)
 ):
     """Update a spawned task"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
 
@@ -639,10 +608,10 @@ def update_spawned_task(
     return task
 
 
-@app.delete("/api/tasks/{task_id}", status_code=204)
+@app.delete("/api/spawned-tasks/{task_id}", status_code=204)
 def delete_spawned_task(task_id: int, session: Session = Depends(get_session)):
     """Delete a spawned task"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
 
@@ -651,10 +620,10 @@ def delete_spawned_task(task_id: int, session: Session = Depends(get_session)):
     return None
 
 
-@app.get("/api/tasks/{task_id}/candidates", response_model=List[str])
+@app.get("/api/spawned-tasks/{task_id}/candidates", response_model=List[str])
 def get_task_candidates(task_id: int, session: Session = Depends(get_session)):
     """Get all candidates associated with a spawned task"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
 
@@ -665,14 +634,14 @@ def get_task_candidates(task_id: int, session: Session = Depends(get_session)):
     return [link.candidate_email for link in links]
 
 
-@app.post("/api/tasks/{task_id}/candidates", status_code=201)
+@app.post("/api/spawned-tasks/{task_id}/candidates", status_code=201)
 def add_candidates_to_task(
     task_id: int,
     request: AddCandidatesRequest,
     session: Session = Depends(get_session)
 ):
     """Add candidates to a spawned task"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
 
@@ -705,14 +674,14 @@ def add_candidates_to_task(
     return {"message": f"Added {len(added)} candidate(s)", "added": added}
 
 
-@app.delete("/api/tasks/{task_id}/candidates/{candidate_email}", status_code=204)
+@app.delete("/api/spawned-tasks/{task_id}/candidates/{candidate_email}", status_code=204)
 def remove_candidate_from_task(
     task_id: int,
     candidate_email: str,
     session: Session = Depends(get_session)
 ):
     """Remove a candidate from a spawned task"""
-    task = session.get(Task, task_id)
+    task = session.get(SpawnedTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
 
@@ -732,10 +701,10 @@ def remove_candidate_from_task(
 
 
 # Task-Template Relationship API Endpoints
-@app.get("/api/task-templates/{task_id}/templates", response_model=List[EmailTemplate])
+@app.get("/api/tasks/{task_id}/templates", response_model=List[EmailTemplate])
 def get_task_templates(task_id: str, session: Session = Depends(get_session)):
     """Get all email templates for a task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -757,10 +726,10 @@ def get_task_templates(task_id: str, session: Session = Depends(get_session)):
     return templates
 
 
-@app.put("/api/task-templates/{task_id}/templates/{template_id}", status_code=201)
+@app.put("/api/tasks/{task_id}/templates/{template_id}", status_code=201)
 def link_template_to_task(task_id: str, template_id: str, session: Session = Depends(get_session)):
     """Link a template to a task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -790,7 +759,7 @@ def link_template_to_task(task_id: str, template_id: str, session: Session = Dep
     return {"message": "Link created successfully"}
 
 
-@app.delete("/api/task-templates/{task_id}/templates/{template_id}", status_code=204)
+@app.delete("/api/tasks/{task_id}/templates/{template_id}", status_code=204)
 def unlink_template_from_task(task_id: str, template_id: str, session: Session = Depends(get_session)):
     """Unlink a template from a task"""
     link = session.exec(
@@ -808,7 +777,7 @@ def unlink_template_from_task(task_id: str, template_id: str, session: Session =
     return None
 
 
-@app.get("/api/templates/{template_id}/tasks", response_model=List[TaskTemplate])
+@app.get("/api/templates/{template_id}/tasks", response_model=List[Task])
 def get_template_tasks(template_id: str, session: Session = Depends(get_session)):
     """Get all tasks for a template"""
     template = session.get(EmailTemplate, template_id)
@@ -825,7 +794,7 @@ def get_template_tasks(template_id: str, session: Session = Depends(get_session)
     # Get the actual tasks
     if task_ids:
         tasks = session.exec(
-            select(TaskTemplate).where(Task.task_id.in_(task_ids))
+            select(Task).where(Task.task_id.in_(task_ids))
         ).all()
     else:
         tasks = []
@@ -840,7 +809,7 @@ def link_task_to_template(template_id: str, task_id: str, session: Session = Dep
     if not template:
         raise HTTPException(status_code=404, detail=f"Template {template_id} not found")
 
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -981,45 +950,26 @@ def table_view(request: Request, session: Session = Depends(get_session)):
             continue
 
         workflow_task_ids = {t.identifier for t in workflow.tasks}
-
-        # Get actual Task instances for this candidate
-        task_links = session.exec(
-            select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate.email)
+        candidate_tasks = session.exec(
+            select(CandidateTask).where(CandidateTask.candidate_id == candidate.email)
         ).all()
-        task_ids = [link.task_id for link in task_links]
+        task_status = {ct.task_identifier: ct for ct in candidate_tasks}
 
-        candidate_tasks = []
-        if task_ids:
-            candidate_tasks = session.exec(
-                select(Task).where(Task.id.in_(task_ids))
-            ).all()
-
-        # Build status map by template_id (ONLY for tasks that exist)
-        task_status = {}
-        for task in candidate_tasks:
-            if task.template_id and task.template_id in workflow_task_ids:
-                task_status[task.template_id] = task
-
-        # Build task_states for this candidate
         task_states = {}
         for task_identifier, _ in sorted_tasks:
             if task_identifier not in workflow_task_ids:
-                # Task not in this candidate's workflow
                 task_states[task_identifier] = None
             else:
-                # Task is in this candidate's workflow
                 ct = task_status.get(task_identifier)
-                if ct:  # Task exists
+                if ct:
                     task_states[task_identifier] = {
-                        'state': ct.status or 'todo',
-                        'exists': True,
-                        'task_id': ct.id
+                        'state': ct.status or 'not_started',
+                        'exists': True
                     }
-                else:  # Task doesn't exist yet but is in workflow
+                else:
                     task_states[task_identifier] = {
-                        'state': 'todo',
-                        'exists': False,
-                        'task_id': None
+                        'state': 'not_started',
+                        'exists': False
                     }
 
         candidate_data.append({
@@ -1084,41 +1034,25 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
     # Ensure all workflow tasks exist for this candidate
     ensure_workflow_tasks(candidate_id, candidate.workflow_id, session)
 
+    candidate_tasks = session.exec(
+        select(CandidateTask).where(CandidateTask.candidate_id == candidate_id)
+    ).all()
+    task_status = {ct.task_identifier: ct for ct in candidate_tasks}
+
     # Get all task IDs in this workflow
     task_identifiers = [task.identifier for task in workflow.tasks]
 
-    # Query Tasks for this candidate that match workflow task identifiers
-    # Get all tasks linked to this candidate
-    task_links = session.exec(
-        select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate.email)
-    ).all()
-    task_ids = [link.task_id for link in task_links]
-
-    # Get all Tasks with these IDs
-    candidate_tasks = []
-    if task_ids:
-        candidate_tasks = session.exec(
-            select(Task).where(Task.id.in_(task_ids))
-        ).all()
-
-    # Build map of template_id -> Task for quick lookup
-    # Filter only tasks that have template_ids matching workflow task identifiers
-    task_status = {}
-    for task in candidate_tasks:
-        if task.template_id and task.template_id in task_identifiers:
-            task_status[task.template_id] = task
-
     # Get all email templates linked to these tasks
     template_task_links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id.in_(task_identifiers))
+        select(EmailTemplateTask).where(EmailTemplateTask.task_id.in_(task_identifiers))
     ).all()
 
     # Build a map of task_id -> list of template IDs
     task_template_map = {}
     for link in template_task_links:
-        if link.task_template_id not in task_template_map:
-            task_template_map[link.task_template_id] = []
-        task_template_map[link.task_template_id].append(link.email_template_id)
+        if link.task_id not in task_template_map:
+            task_template_map[link.task_id] = []
+        task_template_map[link.task_id].append(link.email_template_id)
 
     # Get all email templates that are linked
     all_template_ids = []
@@ -1134,13 +1068,13 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
 
     # Get all checklists linked to these tasks
     checklists = session.exec(
-        select(Checklist).where(Checklist.task_template_id.in_(task_identifiers))
+        select(Checklist).where(Checklist.task_id.in_(task_identifiers))
     ).all()
-    task_checklist_map = {c.task_template_id: c for c in checklists}
+    task_checklist_map = {c.task_id: c for c in checklists}
 
-    # Get all TaskTemplate database records to access special_action field
+    # Get all Task database records to access special_action field
     db_tasks = session.exec(
-        select(TaskTemplate).where(TaskTemplate.task_id.in_(task_identifiers))
+        select(Task).where(Task.task_id.in_(task_identifiers))
     ).all()
     task_db_map = {t.task_id: t for t in db_tasks}
 
@@ -1149,7 +1083,7 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
     tasks_with_status = []
     for task_def in workflow.tasks:
         ct = task_status.get(task_def.identifier)
-        state = ct.status or 'todo' if ct else 'todo'
+        state = ct.status or 'not_started' if ct else 'not_started'
 
         # Get linked templates for this task
         template_ids = task_template_map.get(task_def.identifier, [])
@@ -1166,7 +1100,6 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
             'definition': task_def,
             'candidate_task': ct,
             'state': state,
-            'exists': ct is not None,  # Track whether task instance exists
             'layout': layout.get(task_def.identifier, {'layer': 0, 'index': 0, 'total_in_layer': 1}),
             'email_templates': linked_templates,
             'checklist': linked_checklist,
@@ -1190,18 +1123,9 @@ def view_candidate(request: Request, candidate_id: str, session: Session = Depen
     if not candidate:
         return RedirectResponse(url="/", status_code=302)
 
-    # Get actual Task instances for this candidate
-    task_links = session.exec(
-        select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate.email)
+    tasks = session.exec(
+        select(CandidateTask).where(CandidateTask.candidate_id == candidate_id)
     ).all()
-    task_ids = [link.task_id for link in task_links]
-
-    tasks = []
-    if task_ids:
-        tasks = session.exec(
-            select(Task).where(Task.id.in_(task_ids))
-        ).all()
-
     workflow_tasks = workflow_loader.get_tasks_for_workflow(candidate.workflow_id)
 
     return templates.TemplateResponse("view.html", {
@@ -1348,7 +1272,7 @@ def email_templates_page(request: Request, session: Session = Depends(get_sessio
 def add_email_template_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new email template"""
     # Get all tasks for linking
-    all_tasks = session.exec(select(TaskTemplate).order_by(Task.name)).all()
+    all_tasks = session.exec(select(Task).order_by(Task.name)).all()
 
     return templates.TemplateResponse("email_template_form.html", {
         "request": request,
@@ -1414,7 +1338,7 @@ def edit_email_template_page(template_id: str, request: Request, session: Sessio
         raise HTTPException(status_code=404, detail="Template not found")
 
     # Get all tasks for linking
-    all_tasks = session.exec(select(TaskTemplate).order_by(Task.name)).all()
+    all_tasks = session.exec(select(Task).order_by(Task.name)).all()
 
     # Get currently linked tasks
     links = session.exec(
@@ -1549,20 +1473,20 @@ def compose_email(template_id: str, request: Request, session: Session = Depends
 
 
 # ============================================================================
-# TaskTemplate Routes
+# Task Routes
 # ============================================================================
 
 @app.get("/tasks")
 def tasks_page(request: Request, session: Session = Depends(get_session)):
     """List all tasks"""
-    statement = select(TaskTemplate).order_by(TaskTemplate.name)
+    statement = select(Task).order_by(Task.name)
     tasks = session.exec(statement).all()
 
     # Get linked templates for each task
     task_templates = {}
     for task in tasks:
         links = session.exec(
-            select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task.task_id)
+            select(EmailTemplateTask).where(EmailTemplateTask.task_id == task.task_id)
         ).all()
         template_ids = [link.email_template_id for link in links]
         if template_ids:
@@ -1607,11 +1531,11 @@ def add_task(
 ):
     """Create new task"""
     # Check if task already exists
-    existing_task = session.get(TaskTemplate, task_id)
+    existing_task = session.get(Task, task_id)
     if existing_task:
         raise HTTPException(status_code=400, detail=f"Task {task_id} already exists")
 
-    task = TaskTemplate(
+    task = Task(
         task_id=task_id,
         name=name,
         description=description,
@@ -1637,7 +1561,7 @@ def add_task(
 @app.get("/tasks/{task_id}/edit")
 def edit_task_page(task_id: str, request: Request, session: Session = Depends(get_session)):
     """Show form to edit task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -1670,7 +1594,7 @@ def edit_task(
     session: Session = Depends(get_session)
 ):
     """Update task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -1707,7 +1631,7 @@ def edit_task(
 @app.post("/tasks/{task_id}/delete")
 def delete_task_form(task_id: str, session: Session = Depends(get_session)):
     """Delete task"""
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         return RedirectResponse(url="/tasks", status_code=302)
 
@@ -1727,7 +1651,7 @@ def checklists_page(request: Request, session: Session = Depends(get_session)):
     # Get task info for each checklist
     checklist_tasks = {}
     for checklist in checklists:
-        task = session.get(TaskTemplate, checklist.task_template_id)
+        task = session.get(Task, checklist.task_id)
         checklist_tasks[checklist.id] = task
 
     return templates.TemplateResponse("checklists.html", {
@@ -1741,11 +1665,11 @@ def checklists_page(request: Request, session: Session = Depends(get_session)):
 def add_checklist_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new checklist"""
     # Get all tasks
-    tasks = session.exec(select(TaskTemplate).order_by(TaskTemplate.name)).all()
+    tasks = session.exec(select(Task).order_by(Task.name)).all()
 
     # Get tasks that already have checklists
     existing_checklists = session.exec(select(Checklist)).all()
-    used_task_ids = {c.task_template_id for c in existing_checklists}
+    used_task_ids = {c.task_id for c in existing_checklists}
 
     # Filter to only show tasks without checklists
     available_tasks = [t for t in tasks if t.task_id not in used_task_ids]
@@ -1775,7 +1699,7 @@ def add_checklist(
         raise HTTPException(status_code=400, detail=f"Checklist {checklist_id} already exists")
 
     # Check if task exists
-    task = session.get(TaskTemplate, task_id)
+    task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
@@ -1813,7 +1737,7 @@ def edit_checklist_page(checklist_id: str, request: Request, session: Session = 
         raise HTTPException(status_code=404, detail="Checklist not found")
 
     # Get the task
-    task = session.get(TaskTemplate, checklist.task_id)
+    task = session.get(Task, checklist.task_id)
 
     # Parse items JSON to display as text
     import json

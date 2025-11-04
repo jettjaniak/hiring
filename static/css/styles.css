@@ -262,7 +262,7 @@ textarea {
     background-color: #f1f3f5;
 }
 
-.task-cell.not_started {
+.task-cell.todo {
     background-color: white;
 }
 
@@ -270,12 +270,8 @@ textarea {
     background-color: #fff8e1;
 }
 
-.task-cell.completed {
+.task-cell.done {
     background-color: #d4edda;
-}
-
-.task-cell.na {
-    background-color: #f8f9fa;
 }
 
 .table-status-select {

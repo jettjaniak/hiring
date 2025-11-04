@@ -50,7 +50,7 @@
     width: 200px;
 }
 
-.task-card.not_started {
+.task-card.todo {
     border-color: #6c757d;
 }
 
@@ -58,7 +58,7 @@
     border-style: dashed;
 }
 
-.task-card.not_started.dependencies-not-ready {
+.task-card.todo.dependencies-not-ready {
     border-color: #adb5bd;
 }
 
@@ -67,18 +67,9 @@
     background-color: #fff8e1;
 }
 
-.task-card.completed {
+.task-card.done {
     border-color: #28a745;
     background-color: #d4edda;
-}
-
-.task-card.na {
-    border-color: #6c757d;
-    background-color: #f8f9fa;
-}
-
-.task-card.na .task-name {
-    text-decoration: line-through;
 }
 
 .task-info {

@@ -25,21 +25,6 @@ class Candidate(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class CandidateTask(SQLModel, table=True):
-    """Task status record"""
-    __tablename__ = "candidate_tasks"
-
-    candidate_id: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
-    task_identifier: str = Field(primary_key=True)
-
-    # Task status: "not_started", "in_progress", "completed", "na"
-    status: Optional[str] = None
-
-    # System timestamps
-    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
 class Checklist(SQLModel, table=True):
     """Checklist definition"""
     __tablename__ = "checklists"
@@ -47,7 +32,7 @@ class Checklist(SQLModel, table=True):
     id: str = Field(primary_key=True)
     name: str
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
-    task_id: str = Field(foreign_key="tasks.task_id", unique=True, ondelete="CASCADE")
+    task_template_id: str = Field(foreign_key="task_templates.task_id", unique=True, ondelete="CASCADE")
     items: str = Field(sa_column=Column(Text))  # JSON string: ["item1", "item2", ...]
 
     # System timestamps
@@ -87,9 +72,9 @@ class EmailTemplate(SQLModel, table=True):
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class Task(SQLModel, table=True):
-    """Task definition"""
-    __tablename__ = "tasks"
+class TaskTemplate(SQLModel, table=True):
+    """Task template definition - blueprint for creating tasks"""
+    __tablename__ = "task_templates"
 
     task_id: str = Field(primary_key=True)
     name: str
@@ -102,25 +87,25 @@ class Task(SQLModel, table=True):
 
 
 class EmailTemplateTask(SQLModel, table=True):
-    """Many-to-many relationship between email templates and tasks"""
+    """Many-to-many relationship between email templates and task templates"""
     __tablename__ = "email_template_tasks"
 
     email_template_id: str = Field(foreign_key="email_templates.id", primary_key=True, ondelete="CASCADE")
-    task_id: str = Field(foreign_key="tasks.task_id", primary_key=True, ondelete="CASCADE")
+    task_template_id: str = Field(foreign_key="task_templates.task_id", primary_key=True, ondelete="CASCADE")
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-class SpawnedTask(SQLModel, table=True):
-    """Spawned task instance - actual work item that can be created from templates or ad-hoc"""
-    __tablename__ = "spawned_tasks"
+class Task(SQLModel, table=True):
+    """Task instance - actual work item that can be created from templates or ad-hoc"""
+    __tablename__ = "tasks"
 
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="todo")  # todo, in_progress, done
-    template_id: Optional[str] = Field(default=None, foreign_key="tasks.task_id", ondelete="SET NULL")
+    template_id: Optional[str] = Field(default=None, foreign_key="task_templates.task_id", ondelete="SET NULL")
     workflow_id: Optional[str] = None
 
     # System timestamps
@@ -129,10 +114,10 @@ class SpawnedTask(SQLModel, table=True):
 
 
 class TaskCandidateLink(SQLModel, table=True):
-    """Many-to-many relationship between spawned tasks and candidates"""
+    """Many-to-many relationship between tasks and candidates"""
     __tablename__ = "task_candidate_links"
 
-    task_id: int = Field(foreign_key="spawned_tasks.id", primary_key=True, ondelete="CASCADE")
+    task_id: int = Field(foreign_key="tasks.id", primary_key=True, ondelete="CASCADE")
     candidate_email: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
 
     # System timestamps
