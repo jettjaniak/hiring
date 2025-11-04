@@ -34,7 +34,7 @@ from urllib.parse import quote, unquote
 parser = argparse.ArgumentParser(description='Hiring Process Web Client')
 parser.add_argument('--data-dir', default=None, help='Data directory for client files (default: ~/.hiring-client)')
 parser.add_argument('--port', type=int, default=5001, help='Port to run on (default: 5001)')
-args = parser.parse_args()
+args, _ = parser.parse_known_args()  # Use parse_known_args to avoid conflicts with pytest
 
 # Initialize database
 data_dir = args.data_dir or os.path.expanduser('~/.hiring-client')

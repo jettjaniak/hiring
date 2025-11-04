@@ -1,58 +1,36 @@
 """
 Tests for SpawnedTask API endpoints (Stage 2)
+Simplified version without complex dependency overrides
 """
 import pytest
 import tempfile
 import shutil
 import os
-import sys
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, create_engine, SQLModel
+from sqlalchemy.pool import StaticPool
 
-# Set sys.argv to prevent argparse conflicts with pytest
-sys.argv = ['pytest']
-
-# Import app and models
-from src.database import Database
 from src.models import Candidate, Task, SpawnedTask, TaskCandidateLink
+from src.database import Database
 
 
 @pytest.fixture(scope="function")
-def test_db():
-    """Create a test database"""
-    test_dir = tempfile.mkdtemp()
-    os.chmod(test_dir, 0o755)
-    db_path = os.path.join(test_dir, "test.db")
-
-    db = Database(db_path)
-    db.init_db()
-
-    yield db, db_path
-
-    # Cleanup
-    try:
-        shutil.rmtree(test_dir)
-    except:
-        pass
+def test_engine():
+    """Create an in-memory test database engine"""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+    return engine
 
 
 @pytest.fixture(scope="function")
-def client(test_db):
-    """Create a test client"""
-    db, db_path = test_db
-
-    # Override the database dependency in the app
-    from src.app import app as test_app, get_session
-
-    def override_get_session():
-        with db.get_session() as session:
-            yield session
-
-    test_app.dependency_overrides[get_session] = override_get_session
-
-    # Set up test data
-    with db.get_session() as session:
-        # Create task templates
+def test_session(test_engine):
+    """Create a test database session"""
+    with Session(test_engine) as session:
+        # Set up test data
         template1 = Task(
             task_id="phone_screen",
             name="Phone Screen",
@@ -66,7 +44,50 @@ def client(test_db):
         session.add(template1)
         session.add(template2)
 
-        # Create candidates
+        candidate1 = Candidate(
+            email="candidate1@example.com",
+            name="Candidate One",
+            workflow_id="senior_engineer"
+        )
+        candidate2 = Candidate(
+            email="candidate2@example.com",
+            name="Candidate Two",
+            workflow_id="junior_engineer"
+        )
+        session.add(candidate1)
+        session.add(candidate2)
+
+        session.commit()
+        yield session
+
+
+@pytest.fixture(scope="function")
+def client(test_engine):
+    """Create a test client with in-memory database"""
+    # Import app here to avoid circular imports
+    from src.app import app, get_session
+
+    def override_get_session():
+        with Session(test_engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+
+    # Create test data
+    with Session(test_engine) as session:
+        template1 = Task(
+            task_id="phone_screen",
+            name="Phone Screen",
+            description="Initial phone screening"
+        )
+        template2 = Task(
+            task_id="technical_interview",
+            name="Technical Interview",
+            description="Technical assessment"
+        )
+        session.add(template1)
+        session.add(template2)
+
         candidate1 = Candidate(
             email="candidate1@example.com",
             name="Candidate One",
@@ -82,13 +103,10 @@ def client(test_db):
 
         session.commit()
 
-    # Create test client after setting up dependency override
-    client = TestClient(test_app)
+    with TestClient(app) as test_client:
+        yield test_client
 
-    yield client
-
-    # Clean up dependency overrides
-    test_app.dependency_overrides.clear()
+    app.dependency_overrides.clear()
 
 
 class TestSpawnTaskEndpoint:
@@ -106,6 +124,9 @@ class TestSpawnTaskEndpoint:
 
         assert response.status_code == 201
         data = response.json()
+        print(f"DEBUG: Response JSON = {data}")
+        print(f"DEBUG: Response status = {response.status_code}")
+        print(f"DEBUG: Response text = {response.text}")
         assert data["title"] == "Phone Screen"
         assert data["description"] == "Initial phone screening"
         assert data["status"] == "todo"
