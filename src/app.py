@@ -450,6 +450,7 @@ def spawn_task(
         )
         session.add(link)
     session.commit()
+    session.refresh(spawned_task)  # Refresh after second commit to ensure object is attached
 
     return spawned_task
 
@@ -519,6 +520,7 @@ def create_spawned_task(
         )
         session.add(link)
     session.commit()
+    session.refresh(spawned_task)  # Refresh after second commit to ensure object is attached
 
     return spawned_task
 
