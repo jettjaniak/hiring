@@ -110,3 +110,30 @@ class EmailTemplateTask(SQLModel, table=True):
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SpawnedTask(SQLModel, table=True):
+    """Spawned task instance - actual work item that can be created from templates or ad-hoc"""
+    __tablename__ = "spawned_tasks"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    description: Optional[str] = Field(default=None, sa_column=Column(Text))
+    status: str = "todo"  # todo, in_progress, done
+    template_id: Optional[str] = Field(default=None, foreign_key="tasks.task_id", ondelete="SET NULL")
+    workflow_id: Optional[str] = None
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class TaskCandidateLink(SQLModel, table=True):
+    """Many-to-many relationship between spawned tasks and candidates"""
+    __tablename__ = "task_candidate_links"
+
+    task_id: int = Field(foreign_key="spawned_tasks.id", primary_key=True, ondelete="CASCADE")
+    candidate_email: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
