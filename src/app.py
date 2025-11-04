@@ -24,6 +24,7 @@ from src.database import Database
 from src.workflow_loader import WorkflowLoader
 from src.models import Candidate, EmailTemplate, TaskTemplate, EmailTemplateTask, Checklist, CandidateChecklistState, Task, TaskCandidateLink
 from src.constants import TaskStatus
+from src.crud_helpers import get_or_404, update_model_fields, commit_and_refresh
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -114,10 +115,7 @@ def list_candidates(session: Session = Depends(get_session)):
 @app.get("/api/candidates/{candidate_id}", response_model=Candidate)
 def get_candidate(candidate_id: str, session: Session = Depends(get_session)):
     """Get a candidate by ID"""
-    candidate = session.get(Candidate, candidate_id)
-    if not candidate:
-        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
-    return candidate
+    return get_or_404(session, Candidate, candidate_id, "Candidate")
 
 
 @app.put("/api/candidates/{candidate_id}", response_model=Candidate)
@@ -132,37 +130,22 @@ def update_candidate(
     session: Session = Depends(get_session)
 ):
     """Update a candidate"""
-    candidate = session.get(Candidate, candidate_id)
-    if not candidate:
-        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
-
-    if workflow_id is not None:
-        candidate.workflow_id = workflow_id
-    if name is not None:
-        candidate.name = name
-    if email is not None:
-        candidate.email = email
-    if phone is not None:
-        candidate.phone = phone
-    if resume_url is not None:
-        candidate.resume_url = resume_url
-    if notes is not None:
-        candidate.notes = notes
-
-    candidate.updated_at = datetime.now(timezone.utc)
-    session.add(candidate)
-    session.commit()
-    session.refresh(candidate)
-    return candidate
+    candidate = get_or_404(session, Candidate, candidate_id, "Candidate")
+    update_model_fields(candidate, {
+        'workflow_id': workflow_id,
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'resume_url': resume_url,
+        'notes': notes
+    })
+    return commit_and_refresh(session, candidate)
 
 
 @app.delete("/api/candidates/{candidate_id}", status_code=204)
 def delete_candidate(candidate_id: str, session: Session = Depends(get_session)):
     """Delete a candidate"""
-    candidate = session.get(Candidate, candidate_id)
-    if not candidate:
-        raise HTTPException(status_code=404, detail=f"Candidate {candidate_id} not found")
-
+    candidate = get_or_404(session, Candidate, candidate_id, "Candidate")
     session.delete(candidate)
     session.commit()
     return None
@@ -566,10 +549,7 @@ def list_spawned_tasks(
 @app.get("/api/tasks/{task_id}", response_model=Task)
 def get_spawned_task(task_id: int, session: Session = Depends(get_session)):
     """Get a specific spawned task by ID"""
-    task = session.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
-    return task
+    return get_or_404(session, Task, task_id, "Spawned task")
 
 
 @app.post("/api/tasks", response_model=Task, status_code=201)
@@ -619,34 +599,24 @@ def update_spawned_task(
     session: Session = Depends(get_session)
 ):
     """Update a spawned task"""
-    task = session.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+    task = get_or_404(session, Task, task_id, "Spawned task")
 
-    # Update fields if provided
-    if request.title is not None:
-        task.title = request.title
-    if request.description is not None:
-        task.description = request.description
-    if request.status is not None:
-        if request.status not in TaskStatus.all():
-            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(TaskStatus.all())}")
-        task.status = request.status
+    # Validate status before updating
+    if request.status is not None and request.status not in TaskStatus.all():
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(TaskStatus.all())}")
 
-    task.updated_at = datetime.now(timezone.utc)
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-    return task
+    update_model_fields(task, {
+        'title': request.title,
+        'description': request.description,
+        'status': request.status
+    })
+    return commit_and_refresh(session, task)
 
 
 @app.delete("/api/tasks/{task_id}", status_code=204)
 def delete_spawned_task(task_id: int, session: Session = Depends(get_session)):
     """Delete a spawned task"""
-    task = session.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
-
+    task = get_or_404(session, Task, task_id, "Spawned task")
     session.delete(task)
     session.commit()
     return None
