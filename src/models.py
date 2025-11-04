@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Text
 
+from src.constants import TaskStatus
+
 
 class Candidate(SQLModel, table=True):
     """Candidate record"""
@@ -104,7 +106,7 @@ class Task(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
-    status: str = Field(default="todo")  # todo, in_progress, done
+    status: str = Field(default=TaskStatus.TODO)  # todo, in_progress, done
     template_id: Optional[str] = Field(default=None, foreign_key="task_templates.task_id", ondelete="SET NULL")
     workflow_id: Optional[str] = None
 

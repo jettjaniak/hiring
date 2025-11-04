@@ -23,6 +23,7 @@ from jinja2 import Environment, meta, nodes
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
 from src.models import Candidate, EmailTemplate, TaskTemplate, EmailTemplateTask, Checklist, CandidateChecklistState, Task, TaskCandidateLink
+from src.constants import TaskStatus
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -183,9 +184,9 @@ def get_kanban_data(session: Session = Depends(get_session)):
 
     # Group tasks by status
     kanban_data = {
-        "todo": [],
-        "in_progress": [],
-        "done": []
+        TaskStatus.TODO: [],
+        TaskStatus.IN_PROGRESS: [],
+        TaskStatus.DONE: []
     }
 
     for task in tasks:
@@ -388,7 +389,7 @@ def create_candidate_task(
         title=task_template.name,
         description=task_template.description,
         template_id=task_template.task_id,
-        status="todo",
+        status=TaskStatus.TODO,
         workflow_id=candidate.workflow_id
     )
     session.add(new_task)
@@ -457,7 +458,7 @@ class SpawnTaskRequest(BaseModel):
 class CreateTaskRequest(BaseModel):
     title: str
     description: Optional[str] = None
-    status: Optional[str] = "todo"
+    status: Optional[str] = TaskStatus.TODO
     workflow_id: Optional[str] = None
     candidate_emails: List[str] = []
 
@@ -520,7 +521,7 @@ def spawn_task(
     spawned_task = Task(
         title=title,
         description=description,
-        status="todo",
+        status=TaskStatus.TODO,
         template_id=request.template_id,
         workflow_id=workflow_id
     )
@@ -578,8 +579,8 @@ def create_spawned_task(
 ):
     """Create a new ad-hoc spawned task (not from template)"""
     # Validate status
-    if request.status not in ['todo', 'in_progress', 'done']:
-        raise HTTPException(status_code=400, detail="Invalid status. Must be one of: todo, in_progress, done")
+    if request.status not in TaskStatus.all():
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(TaskStatus.all())}")
 
     # Validate all candidates exist
     for email in request.candidate_emails:
@@ -628,8 +629,8 @@ def update_spawned_task(
     if request.description is not None:
         task.description = request.description
     if request.status is not None:
-        if request.status not in ['todo', 'in_progress', 'done']:
-            raise HTTPException(status_code=400, detail="Invalid status. Must be one of: todo, in_progress, done")
+        if request.status not in TaskStatus.all():
+            raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(TaskStatus.all())}")
         task.status = request.status
 
     task.updated_at = datetime.now(timezone.utc)
@@ -1011,13 +1012,13 @@ def table_view(request: Request, session: Session = Depends(get_session)):
                 ct = task_status.get(task_identifier)
                 if ct:  # Task exists
                     task_states[task_identifier] = {
-                        'state': ct.status or 'todo',
+                        'state': ct.status or TaskStatus.TODO,
                         'exists': True,
                         'task_id': ct.id
                     }
                 else:  # Task doesn't exist yet but is in workflow
                     task_states[task_identifier] = {
-                        'state': 'todo',
+                        'state': TaskStatus.TODO,
                         'exists': False,
                         'task_id': None
                     }
@@ -1149,7 +1150,7 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
     tasks_with_status = []
     for task_def in workflow.tasks:
         ct = task_status.get(task_def.identifier)
-        state = ct.status or 'todo' if ct else 'todo'
+        state = ct.status or TaskStatus.TODO if ct else TaskStatus.TODO
 
         # Get linked templates for this task
         template_ids = task_template_map.get(task_def.identifier, [])

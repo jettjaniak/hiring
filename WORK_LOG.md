@@ -16,14 +16,14 @@
 - [x] Test the endpoint
 - [x] Commit
 
-### 🔄 Phase 2: Extract Status Constants
+### ✅ Phase 2: Extract Status Constants
 **Issue:** Status strings repeated 20+ times
 **Effort:** 3-4 hours
-- [ ] Create src/constants.py with TaskStatus class
-- [ ] Replace all hardcoded status strings
-- [ ] Update validation to use constants
-- [ ] Test all endpoints
-- [ ] Commit
+- [x] Create src/constants.py with TaskStatus class
+- [x] Replace all hardcoded status strings
+- [x] Update validation to use constants
+- [x] Test all endpoints
+- [x] Commit
 
 ### ⏳ Phase 3: Fix N+1 Queries (#4)
 **Issue:** table_view() and workflow_view() have N+1 query problems
@@ -77,4 +77,16 @@
 
 **Decision**: Given the scope of remaining work (Phases 2-6) and that Phase 2 alone is 3-4 hours,
 I should provide a status update to the user on progress and plans for efficient completion.
+
+### Phase 2 Complete (2025-11-04)
+- Created src/constants.py with TaskStatus class (TODO, IN_PROGRESS, DONE)
+- Added TaskStatus import to src/app.py
+- Replaced all 11+ hardcoded status strings with TaskStatus constants:
+  - Dictionary keys in kanban_data (lines 186-188)
+  - Task creation default values (lines 391, 460, 523)
+  - Status validation arrays replaced with TaskStatus.all() (lines 581-582, 631-632)
+  - Fallback values (lines 1014, 1020, 1152)
+- Updated src/models.py to use TaskStatus.TODO as default
+- Tested server successfully - API endpoints working correctly
+- No hardcoded status strings remain in codebase
 
