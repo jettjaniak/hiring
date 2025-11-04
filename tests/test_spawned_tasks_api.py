@@ -13,7 +13,6 @@ from sqlmodel import Session
 sys.argv = ['pytest']
 
 # Import app and models
-from src.app import app, db as app_db
 from src.database import Database
 from src.models import Candidate, Task, SpawnedTask, TaskCandidateLink
 
@@ -43,11 +42,13 @@ def client(test_db):
     db, db_path = test_db
 
     # Override the database dependency in the app
-    import src.app
-    src.app.db = db
+    from src.app import app as test_app, get_session
 
-    # Create test client
-    client = TestClient(app)
+    def override_get_session():
+        with db.get_session() as session:
+            yield session
+
+    test_app.dependency_overrides[get_session] = override_get_session
 
     # Set up test data
     with db.get_session() as session:
@@ -81,10 +82,13 @@ def client(test_db):
 
         session.commit()
 
+    # Create test client after setting up dependency override
+    client = TestClient(test_app)
+
     yield client
 
-    # Restore original database
-    src.app.db = app_db
+    # Clean up dependency overrides
+    test_app.dependency_overrides.clear()
 
 
 class TestSpawnTaskEndpoint:
