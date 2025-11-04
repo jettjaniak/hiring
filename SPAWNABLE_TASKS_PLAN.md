@@ -154,7 +154,7 @@ GET /api/tasks/kanban  # Returns JSON: {todo: [...], in_progress: [...], done: [
 - For each task template in workflow:
   - Show existing spawned task status (if exists)
   - OR show "Spawn Task" button
-  - Check: Only allow spawn if dependencies completed
+  - No dependency checking - allow spawning any task
 
 ### 4.2 Spawn from Workflow
 ```javascript
