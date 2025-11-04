@@ -887,7 +887,10 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
 
 # Helper function for DAG layout computation
 def compute_dag_layout(workflow):
-    """Compute DAG layout with layers based on dependencies"""
+    """Compute DAG layout with layers based on dependencies
+
+    Raises HTTPException if a cycle is detected in the workflow dependencies.
+    """
     task_deps = {}
     task_by_id = {}
     for task in workflow.tasks:
@@ -917,6 +920,46 @@ def compute_dag_layout(workflow):
                     max_dep_layer = max(layers[dep] for dep in task_deps[task_id])
                     layers[task_id] = max_dep_layer + 1
                     queue.append(task_id)
+
+    # Cycle detection: If not all tasks were processed, there's a cycle
+    if len(layers) < len(task_deps):
+        # Find tasks that weren't processed (these are in the cycle)
+        unprocessed = [task_id for task_id in task_deps.keys() if task_id not in layers]
+
+        # Find a cycle path using DFS
+        def find_cycle(start, path, visited):
+            if start in path:
+                # Found cycle - return the cycle portion
+                cycle_start = path.index(start)
+                return path[cycle_start:]
+            if start in visited:
+                return None
+
+            visited.add(start)
+            path.append(start)
+
+            for dep in task_deps.get(start, []):
+                cycle = find_cycle(dep, path[:], visited)
+                if cycle:
+                    return cycle
+
+            return None
+
+        # Find an actual cycle
+        cycle_path = None
+        for task_id in unprocessed:
+            cycle_path = find_cycle(task_id, [], set())
+            if cycle_path:
+                break
+
+        # Format error message
+        if cycle_path:
+            cycle_str = " -> ".join(cycle_path) + " -> " + cycle_path[0]
+            error_msg = f"Circular dependency detected in workflow '{workflow.name}': {cycle_str}"
+        else:
+            error_msg = f"Circular dependency detected in workflow '{workflow.name}'. Tasks involved: {', '.join(unprocessed)}"
+
+        raise HTTPException(status_code=400, detail=error_msg)
 
     layer_groups = defaultdict(list)
     for task_id, layer in layers.items():
