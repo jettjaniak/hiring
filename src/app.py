@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from jinja2 import Environment, meta, nodes
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
-from src.models import Candidate, CandidateTask, EmailTemplate, Task, EmailTemplateTask, Checklist, CandidateChecklistState
+from src.models import Candidate, CandidateTask, EmailTemplate, Task, EmailTemplateTask, Checklist, CandidateChecklistState, SpawnedTask, TaskCandidateLink
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -352,6 +352,293 @@ def delete_candidate_task(candidate_id: str, task_identifier: str, session: Sess
         raise HTTPException(status_code=404, detail=f"Task {task_identifier} not found for candidate {candidate_id}")
 
     session.delete(task)
+    session.commit()
+    return None
+
+
+# ============================================================================
+# Spawnable Tasks API Endpoints (Stage 2)
+# ============================================================================
+
+# Pydantic request models for spawnable tasks
+class SpawnTaskRequest(BaseModel):
+    template_id: str
+    candidate_emails: List[str]
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
+class CreateSpawnedTaskRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    status: Optional[str] = "todo"
+    workflow_id: Optional[str] = None
+    candidate_emails: List[str] = []
+
+
+class UpdateSpawnedTaskRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+
+
+class AddCandidatesRequest(BaseModel):
+    candidate_emails: List[str]
+
+
+@app.post("/api/tasks/spawn", response_model=SpawnedTask, status_code=201)
+def spawn_task(
+    request: SpawnTaskRequest,
+    session: Session = Depends(get_session)
+):
+    """Spawn a task from a template for specific candidates
+
+    If the same template has already been spawned for a candidate, returns the existing task.
+    """
+    # Validate template exists
+    template = session.get(Task, request.template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail=f"Template {request.template_id} not found")
+
+    # Validate all candidates exist
+    for email in request.candidate_emails:
+        candidate = session.get(Candidate, email)
+        if not candidate:
+            raise HTTPException(status_code=404, detail=f"Candidate {email} not found")
+
+    # Check if this template has already been spawned for any of these candidates
+    # Get the first candidate to check workflow_id
+    first_candidate = session.get(Candidate, request.candidate_emails[0])
+    workflow_id = first_candidate.workflow_id if first_candidate else None
+
+    # Look for existing spawned task with same template_id and any of the candidate_emails
+    existing_links = session.exec(
+        select(TaskCandidateLink).where(
+            TaskCandidateLink.candidate_email.in_(request.candidate_emails)
+        )
+    ).all()
+
+    if existing_links:
+        # Check if any of these links point to a task with the same template_id
+        for link in existing_links:
+            spawned_task = session.get(SpawnedTask, link.task_id)
+            if spawned_task and spawned_task.template_id == request.template_id:
+                # Found existing task with same template for at least one candidate
+                # Return it (duplicate prevention)
+                return spawned_task
+
+    # Create new spawned task
+    title = request.title or template.name
+    description = request.description or template.description
+
+    spawned_task = SpawnedTask(
+        title=title,
+        description=description,
+        status="todo",
+        template_id=request.template_id,
+        workflow_id=workflow_id
+    )
+    session.add(spawned_task)
+    session.commit()
+    session.refresh(spawned_task)
+
+    # Create task-candidate links
+    for email in request.candidate_emails:
+        link = TaskCandidateLink(
+            task_id=spawned_task.id,
+            candidate_email=email
+        )
+        session.add(link)
+    session.commit()
+
+    return spawned_task
+
+
+@app.get("/api/spawned-tasks", response_model=List[SpawnedTask])
+def list_spawned_tasks(
+    status: Optional[str] = None,
+    workflow_id: Optional[str] = None,
+    template_id: Optional[str] = None,
+    session: Session = Depends(get_session)
+):
+    """List all spawned tasks with optional filters"""
+    query = select(SpawnedTask)
+
+    if status:
+        query = query.where(SpawnedTask.status == status)
+    if workflow_id:
+        query = query.where(SpawnedTask.workflow_id == workflow_id)
+    if template_id:
+        query = query.where(SpawnedTask.template_id == template_id)
+
+    tasks = session.exec(query).all()
+    return tasks
+
+
+@app.get("/api/spawned-tasks/{task_id}", response_model=SpawnedTask)
+def get_spawned_task(task_id: int, session: Session = Depends(get_session)):
+    """Get a specific spawned task by ID"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+    return task
+
+
+@app.post("/api/spawned-tasks", response_model=SpawnedTask, status_code=201)
+def create_spawned_task(
+    request: CreateSpawnedTaskRequest,
+    session: Session = Depends(get_session)
+):
+    """Create a new ad-hoc spawned task (not from template)"""
+    # Validate status
+    if request.status not in ['todo', 'in_progress', 'done']:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be one of: todo, in_progress, done")
+
+    # Validate all candidates exist
+    for email in request.candidate_emails:
+        candidate = session.get(Candidate, email)
+        if not candidate:
+            raise HTTPException(status_code=404, detail=f"Candidate {email} not found")
+
+    # Create spawned task
+    spawned_task = SpawnedTask(
+        title=request.title,
+        description=request.description,
+        status=request.status,
+        workflow_id=request.workflow_id
+    )
+    session.add(spawned_task)
+    session.commit()
+    session.refresh(spawned_task)
+
+    # Create task-candidate links
+    for email in request.candidate_emails:
+        link = TaskCandidateLink(
+            task_id=spawned_task.id,
+            candidate_email=email
+        )
+        session.add(link)
+    session.commit()
+
+    return spawned_task
+
+
+@app.put("/api/spawned-tasks/{task_id}", response_model=SpawnedTask)
+def update_spawned_task(
+    task_id: int,
+    request: UpdateSpawnedTaskRequest,
+    session: Session = Depends(get_session)
+):
+    """Update a spawned task"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    # Update fields if provided
+    if request.title is not None:
+        task.title = request.title
+    if request.description is not None:
+        task.description = request.description
+    if request.status is not None:
+        if request.status not in ['todo', 'in_progress', 'done']:
+            raise HTTPException(status_code=400, detail="Invalid status. Must be one of: todo, in_progress, done")
+        task.status = request.status
+
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    return task
+
+
+@app.delete("/api/spawned-tasks/{task_id}", status_code=204)
+def delete_spawned_task(task_id: int, session: Session = Depends(get_session)):
+    """Delete a spawned task"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    session.delete(task)
+    session.commit()
+    return None
+
+
+@app.get("/api/spawned-tasks/{task_id}/candidates", response_model=List[str])
+def get_task_candidates(task_id: int, session: Session = Depends(get_session)):
+    """Get all candidates associated with a spawned task"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    links = session.exec(
+        select(TaskCandidateLink).where(TaskCandidateLink.task_id == task_id)
+    ).all()
+
+    return [link.candidate_email for link in links]
+
+
+@app.post("/api/spawned-tasks/{task_id}/candidates", status_code=201)
+def add_candidates_to_task(
+    task_id: int,
+    request: AddCandidatesRequest,
+    session: Session = Depends(get_session)
+):
+    """Add candidates to a spawned task"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    # Validate all candidates exist
+    for email in request.candidate_emails:
+        candidate = session.get(Candidate, email)
+        if not candidate:
+            raise HTTPException(status_code=404, detail=f"Candidate {email} not found")
+
+    # Add new links (skip if already exists)
+    added = []
+    for email in request.candidate_emails:
+        existing = session.exec(
+            select(TaskCandidateLink).where(
+                TaskCandidateLink.task_id == task_id,
+                TaskCandidateLink.candidate_email == email
+            )
+        ).first()
+
+        if not existing:
+            link = TaskCandidateLink(
+                task_id=task_id,
+                candidate_email=email
+            )
+            session.add(link)
+            added.append(email)
+
+    session.commit()
+
+    return {"message": f"Added {len(added)} candidate(s)", "added": added}
+
+
+@app.delete("/api/spawned-tasks/{task_id}/candidates/{candidate_email}", status_code=204)
+def remove_candidate_from_task(
+    task_id: int,
+    candidate_email: str,
+    session: Session = Depends(get_session)
+):
+    """Remove a candidate from a spawned task"""
+    task = session.get(SpawnedTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    link = session.exec(
+        select(TaskCandidateLink).where(
+            TaskCandidateLink.task_id == task_id,
+            TaskCandidateLink.candidate_email == candidate_email
+        )
+    ).first()
+
+    if not link:
+        raise HTTPException(status_code=404, detail=f"Candidate {candidate_email} not associated with task {task_id}")
+
+    session.delete(link)
     session.commit()
     return None
 
