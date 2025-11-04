@@ -443,10 +443,11 @@ class TestWorkflowValidation:
             db = Database(str(db_path))
             db.init_db()
 
-            # Add valid tasks to database
+            # Add valid task templates to database
             with db.get_session() as session:
-                task1 = Task(task_id="valid_task_1", name="Valid Task 1", description="Test task 1")
-                task2 = Task(task_id="valid_task_2", name="Valid Task 2", description="Test task 2")
+                from src.models import TaskTemplate
+                task1 = TaskTemplate(task_id="valid_task_1", name="Valid Task 1", description="Test task 1")
+                task2 = TaskTemplate(task_id="valid_task_2", name="Valid Task 2", description="Test task 2")
                 session.add(task1)
                 session.add(task2)
                 session.commit()
@@ -499,11 +500,11 @@ class TestWorkflowValidation:
 
 
 class TestAPITaskDefinitions:
-    """Test Task API endpoints"""
+    """Test TaskTemplate API endpoints"""
 
     def test_create_task(self, test_app):
-        """Test creating a new task"""
-        response = test_app.post("/api/tasks", params={
+        """Test creating a new task template"""
+        response = test_app.post("/api/task-templates", params={
             "task_id": "test_task_1",
             "name": "Test Task 1",
             "description": "This is a test task"
@@ -515,16 +516,16 @@ class TestAPITaskDefinitions:
         assert data["description"] == "This is a test task"
 
     def test_list_tasks(self, test_app):
-        """Test listing all tasks"""
+        """Test listing all task templates"""
         # Create a task first
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "list_task",
             "name": "List Task",
             "description": "Task for listing"
         })
 
         # List tasks
-        response = test_app.get("/api/tasks")
+        response = test_app.get("/api/task-templates")
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
@@ -534,32 +535,32 @@ class TestAPITaskDefinitions:
         assert "list_task" in task_ids
 
     def test_get_task(self, test_app):
-        """Test getting a specific task"""
+        """Test getting a specific task template"""
         # Create a task
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "get_task",
             "name": "Get Task",
             "description": "Task to get"
         })
 
         # Get the task
-        response = test_app.get("/api/tasks/get_task")
+        response = test_app.get("/api/task-templates/get_task")
         assert response.status_code == 200
         data = response.json()
         assert data["task_id"] == "get_task"
         assert data["name"] == "Get Task"
 
     def test_update_task(self, test_app):
-        """Test updating a task"""
+        """Test updating a task template"""
         # Create a task
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "update_task",
             "name": "Original Name",
             "description": "Original description"
         })
 
         # Update the task
-        response = test_app.put("/api/tasks/update_task", params={
+        response = test_app.put("/api/task-templates/update_task", params={
             "name": "Updated Name",
             "description": "Updated description"
         })
@@ -570,20 +571,20 @@ class TestAPITaskDefinitions:
         assert data["description"] == "Updated description"
 
     def test_delete_task(self, test_app):
-        """Test deleting a task"""
+        """Test deleting a task template"""
         # Create a task
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "delete_task",
             "name": "Delete Task",
             "description": "Task to delete"
         })
 
         # Delete the task
-        response = test_app.delete("/api/tasks/delete_task")
+        response = test_app.delete("/api/task-templates/delete_task")
         assert response.status_code == 204
 
         # Verify it's deleted
-        response = test_app.get("/api/tasks/delete_task")
+        response = test_app.get("/api/task-templates/delete_task")
         assert response.status_code == 404
 
 
@@ -688,13 +689,13 @@ class TestTaskTemplateWebForms:
 
     def test_create_template_with_tasks(self, test_app):
         """Test creating an email template and linking it to tasks via web form"""
-        # Create some tasks first
-        test_app.post("/api/tasks", params={
+        # Create some task templates first
+        test_app.post("/api/task-templates", params={
             "task_id": "screen_resume",
             "name": "Screen Resume"
         })
 
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "phone_screen",
             "name": "Phone Screen"
         })
@@ -734,7 +735,7 @@ class TestChecklistOperations:
     def test_create_checklist(self, test_app):
         """Test creating a checklist via web form"""
         # Create a task first
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "reference_check",
             "name": "Reference Check",
             "description": "Conduct reference checks"
@@ -766,7 +767,7 @@ class TestChecklistOperations:
             assert checklist is not None
             assert checklist.name == "Reference Check List"
             assert checklist.description == "Items to verify during reference check"
-            assert checklist.task_id == "reference_check"
+            assert checklist.task_template_id == "reference_check"
 
             # Verify items are stored as JSON
             items = json.loads(checklist.items)
@@ -778,7 +779,7 @@ class TestChecklistOperations:
     def test_checklist_one_to_one_constraint(self, test_app):
         """Test that a task can only have one checklist"""
         # Create a task
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "onboarding",
             "name": "Onboarding"
         })
@@ -805,7 +806,7 @@ class TestChecklistOperations:
     def test_edit_checklist(self, test_app):
         """Test editing a checklist"""
         # Create task and checklist
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "background_check",
             "name": "Background Check"
         })
@@ -848,7 +849,7 @@ class TestChecklistOperations:
     def test_delete_checklist(self, test_app):
         """Test deleting a checklist"""
         # Create task and checklist
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "drug_test",
             "name": "Drug Test"
         })
@@ -888,7 +889,7 @@ class TestChecklistOperations:
         })
 
         # Create task and checklist
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "training",
             "name": "Training"
         })
@@ -956,7 +957,7 @@ class TestChecklistOperations:
         })
 
         # Create task and checklist
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "orientation",
             "name": "Orientation"
         })
@@ -1023,7 +1024,7 @@ class TestChecklistOperations:
         })
 
         # Create task
-        test_app.post("/api/tasks", params={
+        test_app.post("/api/task-templates", params={
             "task_id": "review",
             "name": "Review"
         })

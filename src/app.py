@@ -426,6 +426,31 @@ def update_candidate_task(
     return task
 
 
+@app.delete("/api/candidates/{candidate_email}/tasks/{task_identifier}", status_code=204)
+def delete_candidate_task(
+    candidate_email: str,
+    task_identifier: str,
+    session: Session = Depends(get_session)
+):
+    """Delete a Task instance for a specific candidate"""
+    # Get the task
+    task = session.exec(
+        select(Task).join(TaskCandidateLink).where(
+            TaskCandidateLink.candidate_email == candidate_email,
+            Task.template_id == task_identifier
+        )
+    ).first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Delete the task (CASCADE will handle TaskCandidateLink)
+    session.delete(task)
+    session.commit()
+
+    return None
+
+
 # ============================================================================
 # Spawnable Tasks API Endpoints (Stage 2)
 # ============================================================================
@@ -1795,7 +1820,7 @@ def add_checklist(
 
     # Check if task already has a checklist
     existing_for_task = session.exec(
-        select(Checklist).where(Checklist.task_id == task_id)
+        select(Checklist).where(Checklist.task_template_id == task_id)
     ).first()
     if existing_for_task:
         raise HTTPException(status_code=400, detail=f"Task {task_id} already has a checklist")
@@ -1809,7 +1834,7 @@ def add_checklist(
         id=checklist_id,
         name=name,
         description=description,
-        task_id=task_id,
+        task_template_id=task_id,
         items=items_json
     )
 
