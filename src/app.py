@@ -25,6 +25,8 @@ from src.workflow_loader import WorkflowLoader
 from src.models import Candidate, EmailTemplate, TaskTemplate, EmailTemplateTask, Checklist, CandidateChecklistState, Task, TaskCandidateLink
 from src.constants import TaskStatus
 from src.crud_helpers import get_or_404, update_model_fields, commit_and_refresh
+from src.routes.api.candidates import router as candidates_router
+from src import dependencies
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -46,6 +48,9 @@ db_file = os.path.join(data_dir, 'hiring.db')
 db = Database(db_file)
 db.init_db()
 
+# Initialize dependency injection system
+dependencies.init_database(db)
+
 # Load workflow definitions (from project root)
 # Pass database to validate task references
 workflow_loader = WorkflowLoader(workflows_dir=str(project_root / "workflows"), db=db)
@@ -63,10 +68,8 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
 
 
-# Dependency for database sessions
-def get_session():
-    with db.get_session() as session:
-        yield session
+# Dependency for database sessions (imported by routes from dependencies module)
+from src.dependencies import get_session
 
 
 def ensure_workflow_tasks(candidate_id: str, workflow_id: str, session: Session):
@@ -75,80 +78,11 @@ def ensure_workflow_tasks(candidate_id: str, workflow_id: str, session: Session)
     pass
 
 
+# Include API routers
+app.include_router(candidates_router)
+
+
 # REST API Endpoints - Auto-generated from SQLModel
-@app.post("/api/candidates", response_model=Candidate, status_code=201)
-def create_candidate(
-    workflow_id: str,
-    email: str,
-    name: Optional[str] = None,
-    phone: Optional[str] = None,
-    resume_url: Optional[str] = None,
-    notes: Optional[str] = None,
-    session: Session = Depends(get_session)
-):
-    """Create a new candidate"""
-    candidate = Candidate(
-        email=email,
-        workflow_id=workflow_id,
-        name=name,
-        phone=phone,
-        resume_url=resume_url,
-        notes=notes
-    )
-    session.add(candidate)
-    session.commit()
-    session.refresh(candidate)
-
-    # Auto-create workflow tasks
-    ensure_workflow_tasks(email, workflow_id, session)
-
-    return candidate
-
-
-@app.get("/api/candidates", response_model=List[Candidate])
-def list_candidates(session: Session = Depends(get_session)):
-    """List all candidates"""
-    candidates = session.exec(select(Candidate)).all()
-    return candidates
-
-
-@app.get("/api/candidates/{candidate_id}", response_model=Candidate)
-def get_candidate(candidate_id: str, session: Session = Depends(get_session)):
-    """Get a candidate by ID"""
-    return get_or_404(session, Candidate, candidate_id, "Candidate")
-
-
-@app.put("/api/candidates/{candidate_id}", response_model=Candidate)
-def update_candidate(
-    candidate_id: str,
-    workflow_id: Optional[str] = None,
-    name: Optional[str] = None,
-    email: Optional[str] = None,
-    phone: Optional[str] = None,
-    resume_url: Optional[str] = None,
-    notes: Optional[str] = None,
-    session: Session = Depends(get_session)
-):
-    """Update a candidate"""
-    candidate = get_or_404(session, Candidate, candidate_id, "Candidate")
-    update_model_fields(candidate, {
-        'workflow_id': workflow_id,
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'resume_url': resume_url,
-        'notes': notes
-    })
-    return commit_and_refresh(session, candidate)
-
-
-@app.delete("/api/candidates/{candidate_id}", status_code=204)
-def delete_candidate(candidate_id: str, session: Session = Depends(get_session)):
-    """Delete a candidate"""
-    candidate = get_or_404(session, Candidate, candidate_id, "Candidate")
-    session.delete(candidate)
-    session.commit()
-    return None
 
 
 # TaskTemplate API Endpoints
@@ -280,174 +214,6 @@ def delete_task(task_id: str, session: Session = Depends(get_session)):
 
     session.delete(task)
     session.commit()
-    return None
-
-
-# ============================================================================
-# Candidate Task Creation Endpoints (Phase 4)
-# ============================================================================
-
-@app.get("/api/candidates/{candidate_email}/tasks")
-def list_candidate_tasks(
-    candidate_email: str,
-    session: Session = Depends(get_session)
-):
-    """List all Task instances for a specific candidate"""
-    # Verify candidate exists
-    candidate = session.exec(
-        select(Candidate).where(Candidate.email == candidate_email)
-    ).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    # Get all tasks for this candidate via TaskCandidateLink
-    task_links = session.exec(
-        select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate_email)
-    ).all()
-    task_ids = [link.task_id for link in task_links]
-
-    tasks = []
-    if task_ids:
-        tasks = session.exec(
-            select(Task).where(Task.id.in_(task_ids))
-        ).all()
-
-    return tasks
-
-
-@app.get("/api/candidates/{candidate_email}/tasks/{task_identifier}")
-def get_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    session: Session = Depends(get_session)
-):
-    """Get a specific Task instance for a candidate by task template identifier"""
-    # Get the task
-    task = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
-        )
-    ).first()
-
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    return task
-
-
-@app.post("/api/candidates/{candidate_email}/tasks/{task_identifier}", status_code=201)
-def create_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    session: Session = Depends(get_session)
-):
-    """Create a Task instance from a TaskTemplate for a specific candidate"""
-    # Get candidate
-    candidate = session.exec(
-        select(Candidate).where(Candidate.email == candidate_email)
-    ).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    # Get TaskTemplate by identifier
-    task_template = session.exec(
-        select(TaskTemplate).where(TaskTemplate.task_id == task_identifier)
-    ).first()
-    if not task_template:
-        raise HTTPException(status_code=404, detail="Task template not found")
-
-    # Check if task already exists for this candidate
-    existing_tasks = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
-        )
-    ).all()
-    if existing_tasks:
-        raise HTTPException(status_code=400, detail="Task already exists for this candidate")
-
-    # Create Task instance from template
-    new_task = Task(
-        title=task_template.name,
-        description=task_template.description,
-        template_id=task_template.task_id,
-        status=TaskStatus.TODO,
-        workflow_id=candidate.workflow_id
-    )
-    session.add(new_task)
-    session.flush()  # Flush to get the auto-generated ID
-
-    # Link to candidate
-    link = TaskCandidateLink(
-        task_id=new_task.id,
-        candidate_email=candidate.email
-    )
-    session.add(link)
-    session.commit()
-    session.refresh(new_task)
-
-    return new_task
-
-
-@app.put("/api/candidates/{candidate_email}/tasks/{task_identifier}")
-def update_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    status: Optional[str] = None,
-    assignee: Optional[str] = None,
-    notes: Optional[str] = None,
-    session: Session = Depends(get_session)
-):
-    """Update a Task instance for a specific candidate"""
-    # Get the task
-    task = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
-        )
-    ).first()
-
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Update fields if provided
-    if status is not None:
-        task.status = status
-    if assignee is not None:
-        task.assignee = assignee
-    if notes is not None:
-        task.notes = notes
-
-    session.add(task)
-    session.commit()
-    session.refresh(task)
-
-    return task
-
-
-@app.delete("/api/candidates/{candidate_email}/tasks/{task_identifier}", status_code=204)
-def delete_candidate_task(
-    candidate_email: str,
-    task_identifier: str,
-    session: Session = Depends(get_session)
-):
-    """Delete a Task instance for a specific candidate"""
-    # Get the task
-    task = session.exec(
-        select(Task).join(TaskCandidateLink).where(
-            TaskCandidateLink.candidate_email == candidate_email,
-            Task.template_id == task_identifier
-        )
-    ).first()
-
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Delete the task (CASCADE will handle TaskCandidateLink)
-    session.delete(task)
-    session.commit()
-
     return None
 
 
@@ -671,6 +437,17 @@ def add_candidates_to_task(
     task = session.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Spawned task {task_id} not found")
+
+    # Tasks from templates cannot be shared between candidates
+    if task.template_id is not None:
+        existing_links = session.exec(
+            select(TaskCandidateLink).where(TaskCandidateLink.task_id == task_id)
+        ).all()
+        if existing_links:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot add candidates to template-based task. Task is already assigned to {existing_links[0].candidate_email}. Template-based tasks must be separate for each candidate."
+            )
 
     # Validate all candidates exist
     for email in request.candidate_emails:
@@ -1387,7 +1164,7 @@ def email_templates_page(request: Request, session: Session = Depends(get_sessio
 def add_email_template_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new email template"""
     # Get all tasks for linking
-    all_tasks = session.exec(select(TaskTemplate).order_by(Task.name)).all()
+    all_tasks = session.exec(select(TaskTemplate).order_by(TaskTemplate.name)).all()
 
     return templates.TemplateResponse("email_template_form.html", {
         "request": request,
