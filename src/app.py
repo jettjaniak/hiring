@@ -27,6 +27,7 @@ from src.constants import TaskStatus
 from src.crud_helpers import get_or_404, update_model_fields, commit_and_refresh
 from src.routes.api.candidates import router as candidates_router
 from src import dependencies
+from src.utils.email_template import infer_template_variables
 from typing import Optional, List
 from collections import defaultdict, deque
 import uvicorn
@@ -70,12 +71,6 @@ app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="
 
 # Dependency for database sessions (imported by routes from dependencies module)
 from src.dependencies import get_session
-
-
-def ensure_workflow_tasks(candidate_id: str, workflow_id: str, session: Session):
-    """Ensure all workflow tasks exist for candidate"""
-    # PHASE 6 TODO: Remove auto-creation - users will create tasks manually
-    pass
 
 
 # Include API routers
@@ -657,96 +652,6 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
     return None
 
 
-# Helper function for DAG layout computation
-def compute_dag_layout(workflow):
-    """Compute DAG layout with layers based on dependencies
-
-    Raises HTTPException if a cycle is detected in the workflow dependencies.
-    """
-    task_deps = {}
-    task_by_id = {}
-    for task in workflow.tasks:
-        task_by_id[task.identifier] = task
-        task_deps[task.identifier] = list(task.dependencies)
-
-    in_degree = defaultdict(int)
-    for task_id, deps in task_deps.items():
-        for dep in deps:
-            in_degree[task_id] += 1
-
-    queue = deque()
-    layers = {}
-    for task_id in task_deps.keys():
-        if in_degree[task_id] == 0:
-            queue.append(task_id)
-            layers[task_id] = 0
-
-    while queue:
-        current = queue.popleft()
-        current_layer = layers[current]
-
-        for task_id, deps in task_deps.items():
-            if current in deps:
-                in_degree[task_id] -= 1
-                if in_degree[task_id] == 0:
-                    max_dep_layer = max(layers[dep] for dep in task_deps[task_id])
-                    layers[task_id] = max_dep_layer + 1
-                    queue.append(task_id)
-
-    # Cycle detection: If not all tasks were processed, there's a cycle
-    if len(layers) < len(task_deps):
-        # Find tasks that weren't processed (these are in the cycle)
-        unprocessed = [task_id for task_id in task_deps.keys() if task_id not in layers]
-
-        # Find a cycle path using DFS
-        def find_cycle(start, path, visited):
-            if start in path:
-                # Found cycle - return the cycle portion
-                cycle_start = path.index(start)
-                return path[cycle_start:]
-            if start in visited:
-                return None
-
-            visited.add(start)
-            path.append(start)
-
-            for dep in task_deps.get(start, []):
-                cycle = find_cycle(dep, path[:], visited)
-                if cycle:
-                    return cycle
-
-            return None
-
-        # Find an actual cycle
-        cycle_path = None
-        for task_id in unprocessed:
-            cycle_path = find_cycle(task_id, [], set())
-            if cycle_path:
-                break
-
-        # Format error message
-        if cycle_path:
-            cycle_str = " -> ".join(cycle_path) + " -> " + cycle_path[0]
-            error_msg = f"Circular dependency detected in workflow '{workflow.name}': {cycle_str}"
-        else:
-            error_msg = f"Circular dependency detected in workflow '{workflow.name}'. Tasks involved: {', '.join(unprocessed)}"
-
-        raise HTTPException(status_code=400, detail=error_msg)
-
-    layer_groups = defaultdict(list)
-    for task_id, layer in layers.items():
-        layer_groups[layer].append(task_id)
-
-    layout = {}
-    for layer, task_ids in layer_groups.items():
-        for idx, task_id in enumerate(task_ids):
-            layout[task_id] = {
-                'layer': layer,
-                'index': idx,
-                'total_in_layer': len(task_ids)
-            }
-
-    return layout, max(layers.values()) if layers else 0
 
 
 # HTML View Routes
@@ -880,9 +785,6 @@ def add_candidate(
     session.add(candidate)
     session.commit()
 
-    # Auto-create workflow tasks
-    ensure_workflow_tasks(email, workflow_id, session)
-
     return RedirectResponse(url=f"/candidate/{quote(email)}", status_code=302)
 
 
@@ -896,9 +798,6 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
     workflow = workflow_loader.get_workflow(candidate.workflow_id)
     if not workflow:
         return RedirectResponse(url="/", status_code=302)
-
-    # Ensure all workflow tasks exist for this candidate
-    ensure_workflow_tasks(candidate_id, candidate.workflow_id, session)
 
     # Get all task IDs in this workflow
     task_identifiers = [task.identifier for task in workflow.tasks]
@@ -1072,10 +971,6 @@ def edit_candidate(
     session.add(candidate)
     session.commit()
 
-    # Auto-create workflow tasks if workflow changed
-    if workflow_id != old_workflow_id:
-        ensure_workflow_tasks(candidate.email, workflow_id, session)
-
     return RedirectResponse(url=f"/candidate/{quote(candidate.email)}", status_code=302)
 
 
@@ -1095,54 +990,6 @@ def delete_candidate_form(candidate_id: str, session: Session = Depends(get_sess
 # ============================================================================
 # Email Template Helper Functions
 # ============================================================================
-
-def infer_template_variables(content: str, subject: str = "", to: str = "", cc: str = "", bcc: str = "") -> List[dict]:
-    """
-    Infer variables from template content using Jinja2 AST parsing.
-    Finds variables in {{ }} and determines their type based on usage.
-
-    Returns list of {"name": str, "type": "text"|"boolean"}
-    """
-    env = Environment()
-    all_text = f"{subject} {to} {cc} {bcc} {content}"
-
-    try:
-        ast = env.parse(all_text)
-    except Exception:
-        # If template parsing fails, return empty list
-        return []
-
-    # Find all undeclared variables
-    all_vars = meta.find_undeclared_variables(ast)
-
-    # Find variables used in If conditions (these are booleans)
-    boolean_vars = set()
-
-    def visit_node(node):
-        if isinstance(node, nodes.If):
-            # Extract variable names from If test expression
-            if isinstance(node.test, nodes.Name):
-                boolean_vars.add(node.test.name)
-            elif isinstance(node.test, nodes.Not) and isinstance(node.test.node, nodes.Name):
-                boolean_vars.add(node.test.node.name)
-
-        # Recursively visit child nodes
-        for child in node.iter_child_nodes():
-            visit_node(child)
-
-    visit_node(ast)
-
-    # Filter out variables with dots (like candidate.name) - these are provided by candidate object
-    simple_vars = {var for var in all_vars if '.' not in var and var != 'candidate'}
-
-    # Build result
-    result = []
-    for var in sorted(simple_vars):
-        var_type = "boolean" if var in boolean_vars else "text"
-        result.append({"name": var, "type": var_type})
-
-    return result
-
 
 # ============================================================================
 # Email Template Routes
