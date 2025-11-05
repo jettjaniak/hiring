@@ -72,8 +72,8 @@ class WorkflowLoader:
 
     def __init__(self, workflows_dir: str = None, db: 'Database' = None):
         if workflows_dir is None:
-            # Default to workflows/ directory next to this file
-            workflows_dir = Path(__file__).parent / 'workflows'
+            # Default to workflows/ directory at project root
+            workflows_dir = Path(__file__).parent.parent / 'workflows'
         self.workflows_dir = Path(workflows_dir)
         self.db = db
         self.workflows: Dict[str, WorkflowDefinition] = {}

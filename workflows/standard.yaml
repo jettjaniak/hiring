@@ -1,0 +1,21 @@
+id: standard
+name: Standard Hiring Workflow
+description: Standard workflow for most candidates
+tasks:
+- task_id: review_resume
+  dependencies: []
+- task_id: phone_screen
+  dependencies:
+  - review_resume
+- task_id: technical_interview
+  dependencies:
+  - phone_screen
+- task_id: team_interview
+  dependencies:
+  - technical_interview
+- task_id: make_offer
+  dependencies:
+  - team_interview
+- task_id: offer_accepted
+  dependencies:
+  - make_offer

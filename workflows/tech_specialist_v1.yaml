@@ -1,81 +1,45 @@
 id: tech_specialist_v1
 name: Technology Specialist
 description: Workflow for hiring technology specialists with diverse evaluation methods
-
 tasks:
-  - identifier: resume_review_v1
-    name: Review Resume
-    description: Initial resume screening
-    dependencies: []
-
-  - identifier: phone_screen_v1
-    name: Phone Screen
-    description: 15-minute phone conversation
-    dependencies:
-      - resume_review_v1
-
-  - identifier: coding_challenge_v1
-    name: Coding Challenge
-    description: Online coding challenge
-    dependencies:
-      - phone_screen_v1
-
-  - identifier: code_review_v1
-    name: Code Review
-    description: Review submitted code
-    dependencies:
-      - phone_screen_v1
-
-  - identifier: reference_check_v1
-    name: Reference Check
-    description: Call references in parallel
-    dependencies:
-      - phone_screen_v1
-
-  - identifier: technical_pairing_v1
-    name: Technical Pairing
-    description: Pair programming session
-    dependencies:
-      - coding_challenge_v1
-      - code_review_v1
-
-  - identifier: domain_expertise_v1
-    name: Domain Expertise Check
-    description: Assess specific domain knowledge
-    dependencies:
-      - code_review_v1
-
-  - identifier: team_collaboration_v1
-    name: Team Collaboration Exercise
-    description: Work on problem with team
-    dependencies:
-      - technical_pairing_v1
-      - reference_check_v1
-
-  - identifier: manager_interview_v1
-    name: Manager Interview
-    description: Interview with hiring manager
-    dependencies:
-      - technical_pairing_v1
-      - domain_expertise_v1
-      - phone_screen_v1
-
-  - identifier: compensation_discussion_v1
-    name: Compensation Discussion
-    description: Discuss salary expectations
-    dependencies:
-      - manager_interview_v1
-      - team_collaboration_v1
-      - reference_check_v1
-
-  - identifier: make_offer_v1
-    name: Make Offer
-    description: Prepare and send offer
-    dependencies:
-      - compensation_discussion_v1
-
-  - identifier: offer_accepted_v1
-    name: Offer Accepted
-    description: Candidate accepted offer
-    dependencies:
-      - make_offer_v1
+- task_id: resume_review_v1
+  dependencies: []
+- task_id: phone_screen_v1
+  dependencies:
+  - resume_review_v1
+- task_id: coding_challenge_v1
+  dependencies:
+  - phone_screen_v1
+- task_id: code_review_v1
+  dependencies:
+  - phone_screen_v1
+- task_id: reference_check_v1
+  dependencies:
+  - phone_screen_v1
+- task_id: technical_pairing_v1
+  dependencies:
+  - coding_challenge_v1
+  - code_review_v1
+- task_id: domain_expertise_v1
+  dependencies:
+  - code_review_v1
+- task_id: team_collaboration_v1
+  dependencies:
+  - technical_pairing_v1
+  - reference_check_v1
+- task_id: manager_interview_v1
+  dependencies:
+  - technical_pairing_v1
+  - domain_expertise_v1
+  - phone_screen_v1
+- task_id: compensation_discussion_v1
+  dependencies:
+  - manager_interview_v1
+  - team_collaboration_v1
+  - reference_check_v1
+- task_id: make_offer_v1
+  dependencies:
+  - compensation_discussion_v1
+- task_id: offer_accepted_v1
+  dependencies:
+  - make_offer_v1

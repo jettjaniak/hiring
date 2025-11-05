@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Simple, local-first hiring process management tool with web interface. No encryption, no sync, just straightforward candidate tracking with workflow visualization and kanban task management.
+Hiring process management tool
 
 ## Architecture
 
-**Single FastAPI Application**: Web interface with truly auto-generated REST APIs powered by FastAPI + SQLModel. **Adding a field to a model automatically exposes it in the API.**
+**Single FastAPI Application**: Web interface with auto-generated REST APIs powered by FastAPI + SQLModel. **Adding a field to a model automatically exposes it in the API.**
 
-### Data Model (Updated 2025-11-04)
+### Data Model
 
 - **Candidate**: Basic candidate information (name, email, phone, resume URL, notes). Linked to a workflow.
 - **TaskTemplate**: Reusable task blueprints with dependencies. Can have email templates, checklists, and special actions attached.
@@ -26,8 +26,6 @@ Simple, local-first hiring process management tool with web interface. No encryp
 **Tasks**: Actual work items with status tracking. Can be:
   - Template-based: Created from TaskTemplate, linked to workflow, appear in Kanban + Workflow + Table views
   - Ad-hoc: Created standalone (no template_id, no workflow_id), only appear in Kanban view
-
-**Status Simplification**: Only 3 statuses now: `todo`, `in_progress`, `done`
 
 ## Development Commands
 
@@ -50,43 +48,6 @@ Server starts on `http://localhost:8000` by default.
 - **Web Interface**: `http://localhost:8000/`
 - **API Documentation**: `http://localhost:8000/docs` (Swagger UI)
 - **Kanban Board**: `http://localhost:8000/kanban`
-
-## REST API
-
-Auto-generated REST API with full Swagger/OpenAPI documentation at `/docs`.
-
-### Candidate Endpoints
-
-- `GET /api/candidates` - List all candidates
-- `POST /api/candidates` - Create new candidate
-- `GET /api/candidates/{email}` - Get candidate by email
-- `PUT /api/candidates/{email}` - Update candidate
-- `DELETE /api/candidates/{email}` - Delete candidate permanently
-
-### TaskTemplate Endpoints
-
-- `GET /api/task-templates` - List all task templates
-- `POST /api/task-templates` - Create new task template
-- `GET /api/task-templates/{task_id}` - Get specific template
-- `PUT /api/task-templates/{task_id}` - Update template
-- `DELETE /api/task-templates/{task_id}` - Delete template
-
-### Task Endpoints (Spawnable Tasks)
-
-- `GET /api/tasks` - List all tasks
-- `POST /api/tasks` - Create new task (template-based or ad-hoc)
-- `GET /api/tasks/{id}` - Get specific task
-- `PUT /api/tasks/{id}` - Update task (including status)
-- `DELETE /api/tasks/{id}` - Delete task
-- `GET /api/kanban` - Get tasks grouped by status for kanban view
-
-### Email Template Endpoints
-
-- `GET /api/email-templates` - List all email templates
-- `POST /api/email-templates` - Create new template
-- `GET /api/email-templates/{id}` - Get specific template
-- `PUT /api/email-templates/{id}` - Update template
-- `DELETE /api/email-templates/{id}` - Delete template
 
 ## Project Structure
 
@@ -123,7 +84,6 @@ hiring/
 - **Kanban Board**: Drag-and-drop task management with status columns
 - **Email Templates**: Variable substitution and candidate-specific emails
 - **Checklists**: Task-associated checklists for structured completion
-- **No External Dependencies**: No server, no sync, no encryption - just simple local data management
 
 ## Technology Stack
 
@@ -153,8 +113,7 @@ When extending this application:
    ```
 2. **Workflows**: Create new workflows as YAML files in `workflows/` directory
 3. **HTML Templates**: Extend `base.html` for consistent styling
-4. **API Endpoints**: Use FastAPI's dependency injection and response_model for type-safe endpoints
-5. **Database Changes**: Update model definitions and recreate the database (or write migrations if needed)
+5. **Database Changes**: Update model definitions and write migrations
 
 **Key Advantage**: With SQLModel, you define each field once with its type. No manual serialization, no separate API schemas, no manual validation. It just works.
 
@@ -164,7 +123,7 @@ When extending this application:
 
 **ALWAYS TEST BEFORE CLAIMING IT WORKS**
 - Never tell the user something is working without actually testing it
-- Test the actual functionality in a browser or via API calls
+- Test the actual functionality via curl
 - Verify that changes are reflected in the running application
 - Check that the database is being queried correctly
 - Don't assume code that looks correct will work correctly
@@ -172,18 +131,8 @@ When extending this application:
 ### Python Scripts, Not Shell Scripts
 
 **CRITICAL**: When creating utility scripts:
-- ✓ Create Python scripts (`.py` files) - these run without approval
-- ✗ DO NOT create shell scripts (`.sh` files) - these require user approval
-- Make Python scripts executable: `chmod +x script.py`
-- Add shebang line: `#!/usr/bin/env python3`
-
-Example:
-```python
-#!/usr/bin/env python3
-"""Script description"""
-
-# Your code here
-```
+- Create Python scripts (`.py` files) and run them with `./venv/bin/python script.py` - these don't require approval
+- Do not create .sh scripts or don't run scripts using ./script.py
 
 ## Standard Development Workflow
 
@@ -220,11 +169,10 @@ curl -X GET http://localhost:8000/your-endpoint
 curl -X POST http://localhost:8000/your-endpoint -H "Content-Type: application/json" -d '{"test":"data"}'
 ```
 
-c) **Verify in browser:**
-- Open http://localhost:8000 in a browser
+c) **Verify via curl:**
+- Open http://localhost:8000
 - Navigate to the feature you implemented
 - Test all user flows and interactions
-- Check browser console for JavaScript errors
 - Verify database changes took effect
 
 d) **Check server logs:**
@@ -248,35 +196,3 @@ Only after completing steps 1-5:
 - Database schema mismatches
 - Template rendering errors
 - Missing imports or dependencies
-- JavaScript errors in browser console
-
-## Model Naming Convention (Updated 2025-11-04)
-
-**Current Architecture:**
-- `TaskTemplate` - The template/blueprint (has dependencies, email templates, checklists)
-- `Task` - The actual work item (has status: todo/in_progress/done)
-- `TaskCandidateLink` - Links Tasks to Candidates (many-to-many)
-
-**Removed:**
-- `CandidateTask` - REMOVED, replaced by Task + TaskCandidateLink
-- Old statuses (`not_started`, `completed`, `na`) - REMOVED, use only: `todo`, `in_progress`, `done`
-
-## Integration Plan: Spawnable Tasks
-
-**Key Design Decisions:**
-1. **Ad-hoc vs Template-based Tasks:**
-   - Ad-hoc: `template_id=null AND workflow_id=null` → Kanban ONLY
-   - Template-based: `template_id` set, `workflow_id` set → Kanban + Workflow + Table
-
-2. **Workflow/Table Views:**
-   - Show "Create Task" button for non-existent tasks (NOT "todo" status)
-   - Tasks are created on-demand, not auto-created for all workflow tasks
-
-3. **Status Updates:**
-   - Kanban drag-and-drop updates Task.status
-   - Changes immediately reflected in Workflow and Table views (single source of truth)
-
-4. **API Consistency:**
-   - `/api/kanban` - GET tasks grouped by status
-   - `/api/tasks` - Full CRUD for Task instances
-   - `/api/task-templates` - Full CRUD for TaskTemplate blueprints

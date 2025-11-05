@@ -1,39 +1,21 @@
 id: test_workflow
 name: Test Workflow
 description: Simple workflow for testing purposes
-
 tasks:
-  - identifier: training
-    name: Training
-    description: Complete training modules
-    dependencies: []
-
-  - identifier: orientation
-    name: Orientation
-    description: New hire orientation
-    dependencies:
-      - training
-
-  - identifier: final_review
-    name: Final Review
-    description: Final review before completion
-    dependencies:
-      - orientation
-
-  - identifier: reference_check
-    name: Reference Check
-    description: Conduct reference checks
-    dependencies: []
-
-  - identifier: background_check
-    name: Background Check
-    description: Run background check
-    dependencies:
-      - reference_check
-
-  - identifier: onboarding
-    name: Onboarding
-    description: Complete onboarding process
-    dependencies:
-      - background_check
-      - final_review
+- task_id: training
+  dependencies: []
+- task_id: orientation
+  dependencies:
+  - training
+- task_id: final_review
+  dependencies:
+  - orientation
+- task_id: reference_check
+  dependencies: []
+- task_id: background_check
+  dependencies:
+  - reference_check
+- task_id: onboarding
+  dependencies:
+  - background_check
+  - final_review
