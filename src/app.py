@@ -18,6 +18,7 @@ sys.path.insert(0, str(project_root))
 from src.database import Database
 from src.workflow_loader import WorkflowLoader
 from src import dependencies
+from src.admin import setup_admin
 from src.routes.api.candidates import router as candidates_router
 from src.routes.api.task_templates import router as task_templates_router
 from src.routes.api.kanban import router as kanban_router
@@ -63,6 +64,9 @@ app = FastAPI(
 
 templates = Jinja2Templates(directory=str(project_root / "templates"))
 app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
+
+# Set up SQLAdmin
+setup_admin(app, db.engine)
 
 # Include API routers
 app.include_router(candidates_router)

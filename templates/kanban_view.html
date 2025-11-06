@@ -55,6 +55,7 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         cursor: move;
         transition: all 0.2s;
+        position: relative;
     }
 
     .kanban-card:hover {
@@ -70,12 +71,30 @@
         margin: 0 0 8px 0;
         font-size: 16px;
         color: #333;
+        padding-right: 24px;
     }
 
     .kanban-card p {
         margin: 0 0 8px 0;
         font-size: 14px;
         color: #666;
+    }
+
+    .ad-hoc-icon {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #9e9e9e;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: help;
     }
 
     .card-badges {
@@ -93,30 +112,98 @@
         font-weight: 500;
     }
 
-    .badge.template {
-        background: #e3f2fd;
-        color: #1976d2;
-    }
-
-    .badge.workflow {
-        background: #f3e5f5;
-        color: #7b1fa2;
-    }
-
     .badge.candidate {
-        background: #e8f5e9;
-        color: #388e3c;
+        /* Colors are set dynamically via JavaScript */
     }
 
     .kanban-column.drag-over {
         background: #e8e8e8;
         border: 2px dashed #999;
     }
+
+    .page-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 20px;
+        padding-bottom: 10px;
+    }
+
+    .page-header h2 {
+        margin: 0;
+    }
+
+    .custom-select {
+        position: relative;
+        min-width: 200px;
+    }
+
+    .select-button {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        background: white;
+    }
+
+    .select-button:hover {
+        border-color: #999;
+    }
+
+    .select-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 4px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        max-height: 300px;
+        overflow-y: auto;
+        display: none;
+        z-index: 1000;
+    }
+
+    .select-dropdown.open {
+        display: block;
+    }
+
+    .select-option {
+        padding: 8px 12px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .select-option:hover {
+        background: #f5f5f5;
+    }
+
+    .select-arrow {
+        font-size: 12px;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<h2>Kanban Board</h2>
+<div class="page-header">
+    <h2>Kanban Board</h2>
+    <div class="custom-select">
+        <div class="select-button" id="selectButton">
+            <span id="selectedText">All Candidates</span>
+            <span class="select-arrow">▼</span>
+        </div>
+        <div class="select-dropdown" id="selectDropdown">
+            <div class="select-option" data-value="">All Candidates</div>
+        </div>
+    </div>
+</div>
 
 <div class="kanban-board">
     <!-- To Do Column -->
@@ -139,30 +226,111 @@
 </div>
 
 <script>
+// Store full kanban data globally for filtering
+let fullKanbanData = {};
+
 // Fetch and display kanban data
 async function loadKanbanData() {
     try {
         const response = await fetch('/api/tasks/kanban');
         const data = await response.json();
 
-        // Clear existing cards
-        document.querySelectorAll('.kanban-cards').forEach(el => el.innerHTML = '');
+        // Store data globally
+        fullKanbanData = data;
 
-        // Populate each column
-        for (const [status, tasks] of Object.entries(data)) {
-            const column = document.querySelector(`.kanban-column[data-status="${status}"]`);
-            const cardsContainer = column.querySelector('.kanban-cards');
-            const countSpan = column.querySelector('.count');
+        // Update candidate filter dropdown
+        updateCandidateFilter(data);
 
-            countSpan.textContent = tasks.length;
-
-            tasks.forEach(task => {
-                const card = createTaskCard(task);
-                cardsContainer.appendChild(card);
-            });
-        }
+        // Display all data (or filtered if a filter is selected)
+        displayKanbanData(data);
     } catch (error) {
         console.error('Error loading kanban data:', error);
+    }
+}
+
+// Update the candidate filter dropdown with unique candidates
+function updateCandidateFilter(data) {
+    const candidatesMap = new Map(); // Use Map to track unique candidates by email
+
+    // Extract all unique candidates from all tasks
+    for (const [status, tasks] of Object.entries(data)) {
+        tasks.forEach(task => {
+            if (task.candidates && task.candidates.length > 0) {
+                task.candidates.forEach(candidate => {
+                    const key = candidate.email || candidate.name;
+                    if (!candidatesMap.has(key)) {
+                        candidatesMap.set(key, candidate);
+                    }
+                });
+            }
+        });
+    }
+
+    // Get the dropdown element
+    const dropdown = document.getElementById('selectDropdown');
+
+    // Keep only the "All Candidates" option
+    dropdown.innerHTML = '<div class="select-option" data-value="">All Candidates</div>';
+
+    // Add candidate options with colors
+    candidatesMap.forEach((candidate, key) => {
+        const option = document.createElement('div');
+        option.className = 'select-option';
+        option.dataset.value = key;
+        option.textContent = candidate.name;
+
+        // Apply the same color scheme as badges
+        const bgColor = getColorFromHash(key, true);
+        const textColor = getColorFromHash(key, false);
+
+        option.style.backgroundColor = bgColor;
+        option.style.color = textColor;
+
+        dropdown.appendChild(option);
+    });
+}
+
+// Display kanban data with optional filtering
+function displayKanbanData(data) {
+    // Clear existing cards
+    document.querySelectorAll('.kanban-cards').forEach(el => el.innerHTML = '');
+
+    // Populate each column
+    for (const [status, tasks] of Object.entries(data)) {
+        const column = document.querySelector(`.kanban-column[data-status="${status}"]`);
+        const cardsContainer = column.querySelector('.kanban-cards');
+        const countSpan = column.querySelector('.count');
+
+        countSpan.textContent = tasks.length;
+
+        tasks.forEach(task => {
+            const card = createTaskCard(task);
+            cardsContainer.appendChild(card);
+        });
+    }
+}
+
+// Hash function to generate consistent color from string
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash = hash & hash;
+    }
+    return Math.abs(hash);
+}
+
+// Generate vibrant color from hash
+function getColorFromHash(str, forBackground) {
+    const hash = hashString(str);
+    const hue = hash % 360; // Random hue across full spectrum
+
+    if (forBackground) {
+        // Background: vibrant with opacity
+        return `hsla(${hue}, 90%, 45%, 0.3)`;
+    } else {
+        // Text: darker version of the same hue
+        return `hsl(${hue}, 75%, 20%)`;
     }
 }
 
@@ -177,6 +345,15 @@ function createTaskCard(task) {
     title.textContent = task.title;
     card.appendChild(title);
 
+    // Add ad-hoc icon if task has no template
+    if (!task.template_id) {
+        const adHocIcon = document.createElement('div');
+        adHocIcon.className = 'ad-hoc-icon';
+        adHocIcon.textContent = 'A';
+        adHocIcon.title = 'Ad-hoc task (not from template)';
+        card.appendChild(adHocIcon);
+    }
+
     if (task.description) {
         const desc = document.createElement('p');
         desc.textContent = task.description;
@@ -186,25 +363,20 @@ function createTaskCard(task) {
     const badges = document.createElement('div');
     badges.className = 'card-badges';
 
-    if (task.template_id) {
-        const templateBadge = document.createElement('span');
-        templateBadge.className = 'badge template';
-        templateBadge.textContent = `Template: ${task.template_id}`;
-        badges.appendChild(templateBadge);
-    }
-
-    if (task.workflow_id) {
-        const workflowBadge = document.createElement('span');
-        workflowBadge.className = 'badge workflow';
-        workflowBadge.textContent = `Workflow: ${task.workflow_id}`;
-        badges.appendChild(workflowBadge);
-    }
-
     if (task.candidates && task.candidates.length > 0) {
         task.candidates.forEach(candidate => {
             const candidateBadge = document.createElement('span');
             candidateBadge.className = 'badge candidate';
             candidateBadge.textContent = candidate.name;
+
+            // Use email for hashing, fallback to name
+            const hashKey = candidate.email || candidate.name;
+            const bgColor = getColorFromHash(hashKey, true);  // true = background
+            const textColor = getColorFromHash(hashKey, false); // false = text
+
+            candidateBadge.style.backgroundColor = bgColor;
+            candidateBadge.style.color = textColor;
+
             badges.appendChild(candidateBadge);
         });
     }
@@ -284,6 +456,83 @@ async function handleDrop(e) {
 
     return false;
 }
+
+// Filter tasks by selected candidate
+let selectedFilterValue = '';
+
+function filterByCandidate(filterValue) {
+    selectedFilterValue = filterValue;
+
+    if (!filterValue) {
+        // Show all tasks
+        displayKanbanData(fullKanbanData);
+        return;
+    }
+
+    // Filter tasks to only show those with the selected candidate
+    const filteredData = {};
+
+    for (const [status, tasks] of Object.entries(fullKanbanData)) {
+        filteredData[status] = tasks.filter(task => {
+            if (!task.candidates || task.candidates.length === 0) {
+                return false;
+            }
+
+            // Check if any candidate matches the filter value
+            return task.candidates.some(candidate => {
+                const key = candidate.email || candidate.name;
+                return key === filterValue;
+            });
+        });
+    }
+
+    displayKanbanData(filteredData);
+}
+
+// Custom dropdown event handlers
+const selectButton = document.getElementById('selectButton');
+const selectDropdown = document.getElementById('selectDropdown');
+const selectedText = document.getElementById('selectedText');
+
+selectButton.addEventListener('click', () => {
+    selectDropdown.classList.toggle('open');
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.custom-select')) {
+        selectDropdown.classList.remove('open');
+    }
+});
+
+// Handle option selection
+selectDropdown.addEventListener('click', (e) => {
+    const option = e.target.closest('.select-option');
+    if (option) {
+        const value = option.dataset.value;
+        const text = option.textContent;
+
+        selectedText.textContent = text;
+
+        // Apply the selected option's color to the button text
+        if (value) {
+            const bgColor = getColorFromHash(value, true);
+            const textColor = getColorFromHash(value, false);
+            selectedText.style.backgroundColor = bgColor;
+            selectedText.style.color = textColor;
+            selectedText.style.padding = '3px 8px';
+            selectedText.style.borderRadius = '4px';
+        } else {
+            selectedText.style.backgroundColor = '';
+            selectedText.style.color = '';
+            selectedText.style.padding = '';
+            selectedText.style.borderRadius = '';
+        }
+
+        selectDropdown.classList.remove('open');
+        filterByCandidate(value);
+    }
+});
 
 // Add event listeners to columns
 document.querySelectorAll('.kanban-column').forEach(column => {
