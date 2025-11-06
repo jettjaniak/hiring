@@ -52,7 +52,8 @@ class CandidateChecklistState(SQLModel, table=True):
     items_state: str = Field(sa_column=Column(Text))  # JSON string: [true, false, true, ...]
 
     # System timestamps
-    last_modified: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class EmailTemplate(SQLModel, table=True):

@@ -54,7 +54,7 @@
                             </a>
                             {% endfor %}
                             {% if task_info.checklist %}
-                            <a href="/checklist/{{ task_info.checklist.id }}/view?candidate={{ candidate.email|urlencode }}&task={{ task_info.definition.identifier|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
+                            <a href="/candidate/{{ candidate.email|urlencode }}/checklist/{{ task_info.checklist.id }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
                                 <strong>{{ task_info.checklist.name }}</strong>
                                 {% if task_info.checklist.description %}
                                 <br><small style="color: #666;">{{ task_info.checklist.description }}</small>

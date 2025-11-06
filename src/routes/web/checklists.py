@@ -191,7 +191,7 @@ def view_checklist(
     # Get or create checklist state
     state = session.exec(
         select(CandidateChecklistState).where(
-            CandidateChecklistState.candidate_email == candidate_email,
+            CandidateChecklistState.candidate_id == candidate_email,
             CandidateChecklistState.checklist_id == checklist_id
         )
     ).first()
@@ -201,23 +201,28 @@ def view_checklist(
         items_list = json.loads(checklist.items)
         state_dict = {item: False for item in items_list}
         state = CandidateChecklistState(
-            candidate_email=candidate_email,
+            candidate_id=candidate_email,
             checklist_id=checklist_id,
-            state=json.dumps(state_dict)
+            items_state=json.dumps(state_dict),
+            task_identifier=""  # Will be set later when integrated with tasks
         )
         session.add(state)
         session.commit()
 
     # Parse items and state
     items_list = json.loads(checklist.items)
-    state_dict = json.loads(state.state)
+    state_dict = json.loads(state.items_state)
+
+    # Convert state dict to list matching item order
+    items_state = [state_dict.get(item, False) for item in items_list]
 
     return templates.TemplateResponse("checklist_view.html", {
         "request": request,
         "checklist": checklist,
         "candidate": candidate,
         "items": items_list,
-        "state": state_dict
+        "items_state": items_state,
+        "task_identifier": state.task_identifier
     })
 
 
@@ -238,7 +243,7 @@ def update_checklist_state(
     # Get existing state
     state = session.exec(
         select(CandidateChecklistState).where(
-            CandidateChecklistState.candidate_email == candidate_email,
+            CandidateChecklistState.candidate_id == candidate_email,
             CandidateChecklistState.checklist_id == checklist_id
         )
     ).first()
@@ -258,7 +263,7 @@ def update_checklist_state(
         # Checkbox is checked if its name appears in form data
         state_dict[item] = item in form
 
-    state.state = json.dumps(state_dict)
+    state.items_state = json.dumps(state_dict)
     state.updated_at = datetime.now(timezone.utc)
     session.add(state)
     session.commit()
