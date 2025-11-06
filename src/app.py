@@ -32,6 +32,7 @@ from src.routes.web import home as home_routes
 from src.routes.web import candidates as candidate_routes
 from src.routes.web import email_templates as email_template_routes
 from src.routes.web import task_templates as task_template_routes
+from src.routes.web import checklists as checklist_routes
 from src import dependencies
 from src.utils.email_template import infer_template_variables
 from typing import Optional, List
@@ -93,6 +94,7 @@ app.include_router(home_routes.router)
 app.include_router(candidate_routes.router)
 app.include_router(email_template_routes.router)
 app.include_router(task_template_routes.router)
+app.include_router(checklist_routes.router)
 
 
 # REST API Endpoints - Auto-generated from SQLModel
@@ -552,173 +554,16 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
 # HTML View Routes (extracted to src/routes/web/)
 
 
-# Checklist Web UI Endpoints
-@app.get("/checklists")
-def checklists_page(request: Request, session: Session = Depends(get_session)):
-    """List all checklists"""
-    statement = select(Checklist).order_by(Checklist.name)
-    checklists = session.exec(statement).all()
-
-    # Get task info for each checklist
-    checklist_tasks = {}
-    for checklist in checklists:
-        task = session.get(TaskTemplate, checklist.task_template_id)
-        checklist_tasks[checklist.id] = task
-
-    return templates.TemplateResponse("checklists.html", {
-        "request": request,
-        "checklists": checklists,
-        "checklist_tasks": checklist_tasks
-    })
-
-
-@app.get("/checklists/add")
-def add_checklist_page(request: Request, session: Session = Depends(get_session)):
-    """Show form to add new checklist"""
-    # Get all tasks
-    tasks = session.exec(select(TaskTemplate).order_by(TaskTemplate.name)).all()
-
-    # Get tasks that already have checklists
-    existing_checklists = session.exec(select(Checklist)).all()
-    used_task_ids = {c.task_template_id for c in existing_checklists}
-
-    # Filter to only show tasks without checklists
-    available_tasks = [t for t in tasks if t.task_id not in used_task_ids]
-
-    return templates.TemplateResponse("checklist_edit.html", {
-        "request": request,
-        "checklist": None,
-        "mode": "add",
-        "available_tasks": available_tasks
-    })
-
-
-@app.post("/checklists/add")
-def add_checklist(
-    request: Request,
-    checklist_id: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    task_id: str = Form(...),
-    items: str = Form(...),
-    session: Session = Depends(get_session)
-):
-    """Create new checklist"""
-    # Check if checklist already exists
-    existing_checklist = session.get(Checklist, checklist_id)
-    if existing_checklist:
-        raise HTTPException(status_code=400, detail=f"Checklist {checklist_id} already exists")
-
-    # Check if task exists
-    task = session.get(TaskTemplate, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-
-    # Check if task already has a checklist
-    existing_for_task = session.exec(
-        select(Checklist).where(Checklist.task_template_id == task_id)
-    ).first()
-    if existing_for_task:
-        raise HTTPException(status_code=400, detail=f"Task {task_id} already has a checklist")
-
-    # Parse items (newline separated) and convert to JSON string
-    import json
-    items_list = [item.strip() for item in items.split('\n') if item.strip()]
-    items_json = json.dumps(items_list)
-
-    checklist = Checklist(
-        id=checklist_id,
-        name=name,
-        description=description,
-        task_template_id=task_id,
-        items=items_json
-    )
-
-    session.add(checklist)
-    session.commit()
-
-    return RedirectResponse(url="/checklists", status_code=302)
-
-
-@app.get("/checklists/{checklist_id}/edit")
-def edit_checklist_page(checklist_id: str, request: Request, session: Session = Depends(get_session)):
-    """Show form to edit checklist"""
-    checklist = session.get(Checklist, checklist_id)
-    if not checklist:
-        raise HTTPException(status_code=404, detail="Checklist not found")
-
-    # Get the task
-    task = session.get(TaskTemplate, checklist.task_id)
-
-    # Parse items JSON to display as text
-    import json
-    items_list = json.loads(checklist.items)
-    items_text = '\n'.join(items_list)
-
-    return templates.TemplateResponse("checklist_edit.html", {
-        "request": request,
-        "checklist": checklist,
-        "mode": "edit",
-        "available_tasks": [task] if task else [],
-        "items_text": items_text
-    })
-
-
-@app.post("/checklists/{checklist_id}/edit")
-def edit_checklist(
-    checklist_id: str,
-    request: Request,
-    name: str = Form(...),
-    description: str = Form(""),
-    items: str = Form(...),
-    session: Session = Depends(get_session)
-):
-    """Update checklist"""
-    checklist = session.get(Checklist, checklist_id)
-    if not checklist:
-        raise HTTPException(status_code=404, detail="Checklist not found")
-
-    # Parse items (newline separated) and convert to JSON string
-    import json
-    items_list = [item.strip() for item in items.split('\n') if item.strip()]
-    items_json = json.dumps(items_list)
-
-    checklist.name = name
-    checklist.description = description
-    checklist.items = items_json
-    checklist.updated_at = datetime.now(timezone.utc)
-
-    session.add(checklist)
-    session.commit()
-
-    return RedirectResponse(url="/checklists", status_code=302)
-
-
-@app.post("/checklists/{checklist_id}/delete")
-def delete_checklist_form(checklist_id: str, session: Session = Depends(get_session)):
-    """Delete checklist"""
-    checklist = session.get(Checklist, checklist_id)
-    if not checklist:
-        return RedirectResponse(url="/checklists", status_code=302)
-
-    session.delete(checklist)
-    session.commit()
-
-    return RedirectResponse(url="/checklists", status_code=302)
-
-
-# Checklist View and Save Endpoints
+# Legacy checklist API endpoints (deprecated - kept for backward compatibility)
 @app.get("/checklist/{checklist_id}/view")
-def view_checklist(
+def view_checklist_legacy(
     checklist_id: str,
     candidate: str,
     task: str,
     request: Request,
     session: Session = Depends(get_session)
 ):
-    """View checklist for a candidate"""
-    import json
-
+    """View checklist for a candidate (legacy endpoint)"""
     checklist = session.get(Checklist, checklist_id)
     if not checklist:
         raise HTTPException(status_code=404, detail="Checklist not found")
@@ -754,40 +599,7 @@ def view_checklist(
     })
 
 
-@app.post("/checklist/{checklist_id}/save")
-def save_checklist(
-    checklist_id: str,
-    candidate: str = Form(...),
-    task: str = Form(...),
-    session: Session = Depends(get_session)
-):
-    """Save checklist state for a candidate"""
-    import json
-    from fastapi import Form as FormParam
-    from starlette.requests import Request as StarletteRequest
-
-    # Get form data
-    async def get_form_data(request: StarletteRequest):
-        form = await request.form()
-        return form
-
-    checklist = session.get(Checklist, checklist_id)
-    if not checklist:
-        raise HTTPException(status_code=404, detail="Checklist not found")
-
-    items = json.loads(checklist.items)
-
-    # Build items_state from form data
-    # The form will have checkboxes named "item_0", "item_1", etc.
-    items_state = []
-    from starlette.requests import Request as StarletteRequest
-
-    # We need to get the request to access form data
-    # This is a workaround - we'll accept items_state as a JSON string
-    return RedirectResponse(url=f"/checklist/{checklist_id}/view?candidate={candidate}&task={task}", status_code=302)
-
-
-# Better approach: use JSON endpoint
+# Define model for checklist save request
 class ChecklistSaveRequest(BaseModel):
     candidate_id: str
     task_identifier: str
@@ -795,14 +607,12 @@ class ChecklistSaveRequest(BaseModel):
 
 
 @app.post("/api/checklist/{checklist_id}/save")
-def save_checklist_api(
+def save_checklist_api_legacy(
     checklist_id: str,
     request: ChecklistSaveRequest,
     session: Session = Depends(get_session)
 ):
-    """Save checklist state for a candidate (API)"""
-    import json
-
+    """Save checklist state for a candidate (legacy API endpoint)"""
     checklist = session.get(Checklist, checklist_id)
     if not checklist:
         raise HTTPException(status_code=404, detail="Checklist not found")
