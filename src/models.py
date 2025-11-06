@@ -1,12 +1,15 @@
 """
 Database models for local storage
 """
-from sqlmodel import SQLModel, Field, JSON, Column
+from sqlmodel import SQLModel, Field, JSON, Column, Relationship
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import Text
 
 from src.constants import TaskStatus
+
+if TYPE_CHECKING:
+    from typing import List
 
 
 class Candidate(SQLModel, table=True):
@@ -26,6 +29,9 @@ class Candidate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def __str__(self):
+        return f"{self.name or self.email}"
+
 
 class Checklist(SQLModel, table=True):
     """Checklist definition"""
@@ -37,9 +43,15 @@ class Checklist(SQLModel, table=True):
     task_template_id: str = Field(foreign_key="task_templates.task_id", unique=True, ondelete="CASCADE")
     items: str = Field(sa_column=Column(Text))  # JSON string: ["item1", "item2", ...]
 
+    # Relationships
+    task_template: Optional["TaskTemplate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __str__(self):
+        return self.name
 
 
 class CandidateChecklistState(SQLModel, table=True):
@@ -50,6 +62,10 @@ class CandidateChecklistState(SQLModel, table=True):
     task_identifier: str = Field(primary_key=True)
     checklist_id: str = Field(foreign_key="checklists.id", primary_key=True, ondelete="CASCADE")
     items_state: str = Field(sa_column=Column(Text))  # JSON string: [true, false, true, ...]
+
+    # Relationships
+    candidate: Optional["Candidate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+    checklist: Optional["Checklist"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -74,6 +90,9 @@ class EmailTemplate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def __str__(self):
+        return self.name
+
 
 class TaskTemplate(SQLModel, table=True):
     """Task template definition - blueprint for creating tasks"""
@@ -88,6 +107,9 @@ class TaskTemplate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    def __str__(self):
+        return self.name
+
 
 class EmailTemplateTask(SQLModel, table=True):
     """Many-to-many relationship between email templates and task templates"""
@@ -95,6 +117,10 @@ class EmailTemplateTask(SQLModel, table=True):
 
     email_template_id: str = Field(foreign_key="email_templates.id", primary_key=True, ondelete="CASCADE")
     task_template_id: str = Field(foreign_key="task_templates.task_id", primary_key=True, ondelete="CASCADE")
+
+    # Relationships
+    email_template: Optional["EmailTemplate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+    task_template: Optional["TaskTemplate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -111,9 +137,15 @@ class Task(SQLModel, table=True):
     template_id: Optional[str] = Field(default=None, foreign_key="task_templates.task_id", ondelete="SET NULL")
     workflow_id: Optional[str] = None
 
+    # Relationships
+    template: Optional["TaskTemplate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __str__(self):
+        return self.title
 
 
 class TaskCandidateLink(SQLModel, table=True):
@@ -122,6 +154,10 @@ class TaskCandidateLink(SQLModel, table=True):
 
     task_id: int = Field(foreign_key="tasks.id", primary_key=True, ondelete="CASCADE")
     candidate_email: str = Field(foreign_key="candidates.email", primary_key=True, ondelete="CASCADE")
+
+    # Relationships
+    task: Optional["Task"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
+    candidate: Optional["Candidate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))

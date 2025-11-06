@@ -28,6 +28,12 @@ class ChecklistAdmin(ModelView, model=Checklist):
     column_list = [Checklist.id, Checklist.name, Checklist.task_template_id, Checklist.created_at]
     column_searchable_list = [Checklist.name]
     column_sortable_list = [Checklist.name, Checklist.created_at]
+    form_ajax_refs = {
+        "task_template": {
+            "fields": ("task_id", "name"),
+            "order_by": "name",
+        }
+    }
     name = "Checklist"
     name_plural = "Checklists"
     icon = "fa-solid fa-list-check"
@@ -41,6 +47,16 @@ class CandidateChecklistStateAdmin(ModelView, model=CandidateChecklistState):
         CandidateChecklistState.updated_at
     ]
     column_searchable_list = [CandidateChecklistState.candidate_id, CandidateChecklistState.task_identifier]
+    form_ajax_refs = {
+        "candidate": {
+            "fields": ("email", "name"),
+            "order_by": "name",
+        },
+        "checklist": {
+            "fields": ("id", "name"),
+            "order_by": "name",
+        }
+    }
     name = "Checklist State"
     name_plural = "Checklist States"
     icon = "fa-solid fa-check-square"
@@ -70,6 +86,16 @@ class EmailTemplateTaskAdmin(ModelView, model=EmailTemplateTask):
         EmailTemplateTask.task_template_id,
         EmailTemplateTask.created_at
     ]
+    form_ajax_refs = {
+        "email_template": {
+            "fields": ("id", "name"),
+            "order_by": "name",
+        },
+        "task_template": {
+            "fields": ("task_id", "name"),
+            "order_by": "name",
+        }
+    }
     name = "Email-Task Link"
     name_plural = "Email-Task Links"
     icon = "fa-solid fa-link"
@@ -80,6 +106,12 @@ class TaskAdmin(ModelView, model=Task):
     column_searchable_list = [Task.title]
     column_sortable_list = [Task.title, Task.status, Task.created_at]
     column_default_sort = [(Task.created_at, True)]  # Descending order
+    form_ajax_refs = {
+        "template": {
+            "fields": ("task_id", "name"),
+            "order_by": "name",
+        }
+    }
     name = "Task"
     name_plural = "Tasks"
     icon = "fa-solid fa-tasks"
@@ -91,6 +123,16 @@ class TaskCandidateLinkAdmin(ModelView, model=TaskCandidateLink):
         TaskCandidateLink.candidate_email,
         TaskCandidateLink.created_at
     ]
+    form_ajax_refs = {
+        "task": {
+            "fields": ("id", "title"),
+            "order_by": "id",
+        },
+        "candidate": {
+            "fields": ("email", "name"),
+            "order_by": "name",
+        }
+    }
     name = "Task-Candidate Link"
     name_plural = "Task-Candidate Links"
     icon = "fa-solid fa-link"
