@@ -31,6 +31,7 @@ from src.routes.api.kanban import router as kanban_router
 from src.routes.web import home as home_routes
 from src.routes.web import candidates as candidate_routes
 from src.routes.web import email_templates as email_template_routes
+from src.routes.web import task_templates as task_template_routes
 from src import dependencies
 from src.utils.email_template import infer_template_variables
 from typing import Optional, List
@@ -91,6 +92,7 @@ app.include_router(kanban_router)
 app.include_router(home_routes.router)
 app.include_router(candidate_routes.router)
 app.include_router(email_template_routes.router)
+app.include_router(task_template_routes.router)
 
 
 # REST API Endpoints - Auto-generated from SQLModel
@@ -548,175 +550,6 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
 
 
 # HTML View Routes (extracted to src/routes/web/)
-
-
-# ============================================================================
-# TaskTemplate Routes
-# ============================================================================
-
-@app.get("/tasks")
-def tasks_page(request: Request, session: Session = Depends(get_session)):
-    """List all tasks"""
-    statement = select(TaskTemplate).order_by(TaskTemplate.name)
-    tasks = session.exec(statement).all()
-
-    # Get linked templates for each task
-    task_templates = {}
-    for task in tasks:
-        links = session.exec(
-            select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task.task_id)
-        ).all()
-        template_ids = [link.email_template_id for link in links]
-        if template_ids:
-            templates_list = session.exec(
-                select(EmailTemplate).where(EmailTemplate.id.in_(template_ids))
-            ).all()
-            task_templates[task.task_id] = templates_list
-        else:
-            task_templates[task.task_id] = []
-
-    return templates.TemplateResponse("tasks.html", {
-        "request": request,
-        "tasks": tasks,
-        "task_templates": task_templates
-    })
-
-
-@app.get("/tasks/add")
-def add_task_page(request: Request, session: Session = Depends(get_session)):
-    """Show form to add new task"""
-    # Get all email templates for linking
-    email_templates = session.exec(select(EmailTemplate).order_by(EmailTemplate.name)).all()
-
-    return templates.TemplateResponse("task_edit.html", {
-        "request": request,
-        "task": None,
-        "mode": "add",
-        "email_templates": email_templates,
-        "linked_template_ids": []
-    })
-
-
-@app.post("/tasks/add")
-def add_task(
-    request: Request,
-    task_id: str = Form(...),
-    name: str = Form(...),
-    description: str = Form(""),
-    special_action: str = Form(""),
-    template_ids: List[str] = Form([]),
-    session: Session = Depends(get_session)
-):
-    """Create new task"""
-    # Check if task already exists
-    existing_task = session.get(TaskTemplate, task_id)
-    if existing_task:
-        raise HTTPException(status_code=400, detail=f"Task {task_id} already exists")
-
-    task = TaskTemplate(
-        task_id=task_id,
-        name=name,
-        description=description,
-        special_action=special_action if special_action else None
-    )
-
-    session.add(task)
-    session.commit()
-
-    # Link to selected templates
-    if template_ids:
-        for template_id in template_ids:
-            link = EmailTemplateTask(
-                task_template_id=task_id,
-                email_template_id=template_id
-            )
-            session.add(link)
-        session.commit()
-
-    return RedirectResponse(url="/tasks", status_code=302)
-
-
-@app.get("/tasks/{task_id}/edit")
-def edit_task_page(task_id: str, request: Request, session: Session = Depends(get_session)):
-    """Show form to edit task"""
-    task = session.get(TaskTemplate, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    # Get all email templates for linking
-    email_templates = session.exec(select(EmailTemplate).order_by(EmailTemplate.name)).all()
-
-    # Get currently linked templates
-    links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task_id)
-    ).all()
-    linked_template_ids = [link.email_template_id for link in links]
-
-    return templates.TemplateResponse("task_edit.html", {
-        "request": request,
-        "task": task,
-        "mode": "edit",
-        "email_templates": email_templates,
-        "linked_template_ids": linked_template_ids
-    })
-
-
-@app.post("/tasks/{task_id}/edit")
-def edit_task(
-    task_id: str,
-    request: Request,
-    name: str = Form(...),
-    description: str = Form(""),
-    special_action: str = Form(""),
-    template_ids: List[str] = Form([]),
-    session: Session = Depends(get_session)
-):
-    """Update task"""
-    task = session.get(TaskTemplate, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    task.name = name
-    task.description = description
-    task.special_action = special_action if special_action else None
-    task.updated_at = datetime.now(timezone.utc)
-
-    session.add(task)
-    session.commit()
-
-    # Update template links
-    # First, remove all existing links
-    existing_links = session.exec(
-        select(EmailTemplateTask).where(EmailTemplateTask.task_template_id == task_id)
-    ).all()
-    for link in existing_links:
-        session.delete(link)
-    session.commit()
-
-    # Then add new links
-    if template_ids:
-        for template_id in template_ids:
-            link = EmailTemplateTask(
-                task_template_id=task_id,
-                email_template_id=template_id
-            )
-            session.add(link)
-        session.commit()
-
-    return RedirectResponse(url="/tasks", status_code=302)
-
-
-@app.post("/tasks/{task_id}/delete")
-def delete_task_form(task_id: str, session: Session = Depends(get_session)):
-    """Delete task"""
-    task = session.get(TaskTemplate, task_id)
-    if not task:
-        return RedirectResponse(url="/tasks", status_code=302)
-
-    session.delete(task)
-    session.commit()
-
-    return RedirectResponse(url="/tasks", status_code=302)
 
 
 # Checklist Web UI Endpoints
