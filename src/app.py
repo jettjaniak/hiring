@@ -27,6 +27,7 @@ from src.constants import TaskStatus
 from src.crud_helpers import get_or_404, update_model_fields, commit_and_refresh
 from src.routes.api.candidates import router as candidates_router
 from src.routes.api.task_templates import router as task_templates_router
+from src.routes.api.kanban import router as kanban_router
 from src import dependencies
 from src.utils.email_template import infer_template_variables
 from typing import Optional, List
@@ -77,55 +78,10 @@ from src.dependencies import get_session
 # Include API routers
 app.include_router(candidates_router)
 app.include_router(task_templates_router)
+app.include_router(kanban_router)
 
 
 # REST API Endpoints - Auto-generated from SQLModel
-
-
-# Kanban View Endpoints
-@app.get("/api/tasks/kanban")
-def get_kanban_data(session: Session = Depends(get_session)):
-    """Get tasks grouped by status for kanban view"""
-    tasks = session.exec(select(Task)).all()
-
-    # Group tasks by status
-    kanban_data = {
-        TaskStatus.TODO: [],
-        TaskStatus.IN_PROGRESS: [],
-        TaskStatus.DONE: []
-    }
-
-    for task in tasks:
-        # Get associated candidates for this task
-        links = session.exec(
-            select(TaskCandidateLink).where(TaskCandidateLink.task_id == task.id)
-        ).all()
-        candidate_emails = [link.candidate_email for link in links]
-
-        # Get candidate names
-        candidates = []
-        for email in candidate_emails:
-            candidate = session.get(Candidate, email)
-            if candidate:
-                candidates.append({
-                    "email": candidate.email,
-                    "name": candidate.name or candidate.email
-                })
-
-        task_data = {
-            "id": task.id,
-            "title": task.title,
-            "description": task.description,
-            "template_id": task.template_id,
-            "workflow_id": task.workflow_id,
-            "candidates": candidates,
-            "created_at": task.created_at.isoformat() if task.created_at else None,
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None
-        }
-
-        kanban_data[task.status].append(task_data)
-
-    return kanban_data
 
 
 @app.get("/tasks/kanban")
