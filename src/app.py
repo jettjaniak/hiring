@@ -33,6 +33,7 @@ from src.routes.web import candidates as candidate_routes
 from src.routes.web import email_templates as email_template_routes
 from src.routes.web import task_templates as task_template_routes
 from src.routes.web import checklists as checklist_routes
+from src.routes.web import kanban as kanban_web_routes
 from src import dependencies
 from src.utils.email_template import infer_template_variables
 from typing import Optional, List
@@ -95,18 +96,10 @@ app.include_router(candidate_routes.router)
 app.include_router(email_template_routes.router)
 app.include_router(task_template_routes.router)
 app.include_router(checklist_routes.router)
+app.include_router(kanban_web_routes.router)
 
 
 # REST API Endpoints - Auto-generated from SQLModel
-
-
-@app.get("/tasks/kanban")
-def view_kanban(request: Request, session: Session = Depends(get_session)):
-    """Render kanban board view"""
-    return templates.TemplateResponse(
-        "kanban_view.html",
-        {"request": request}
-    )
 
 
 # ============================================================================
