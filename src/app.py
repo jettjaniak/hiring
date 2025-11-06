@@ -28,6 +28,7 @@ from src.crud_helpers import get_or_404, update_model_fields, commit_and_refresh
 from src.routes.api.candidates import router as candidates_router
 from src.routes.api.task_templates import router as task_templates_router
 from src.routes.api.kanban import router as kanban_router
+from src.routes.web import home as home_routes
 from src import dependencies
 from src.utils.email_template import infer_template_variables
 from typing import Optional, List
@@ -58,6 +59,9 @@ dependencies.init_database(db)
 # Pass database to validate task references
 workflow_loader = WorkflowLoader(workflows_dir=str(project_root / "workflows"), db=db)
 
+# Set workflow_loader for web routes that need it
+home_routes.workflow_loader = workflow_loader
+
 # Initialize FastAPI
 app = FastAPI(
     title="Hiring Process API",
@@ -79,6 +83,9 @@ from src.dependencies import get_session
 app.include_router(candidates_router)
 app.include_router(task_templates_router)
 app.include_router(kanban_router)
+
+# Include web UI routers
+app.include_router(home_routes.router)
 
 
 # REST API Endpoints - Auto-generated from SQLModel
@@ -535,105 +542,7 @@ def unlink_task_from_template(template_id: str, task_id: str, session: Session =
 
 
 
-# HTML View Routes
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request, session: Session = Depends(get_session)):
-    """List all candidates"""
-    candidates = session.exec(select(Candidate)).all()
-    return templates.TemplateResponse("index.html", {"request": request, "candidates": candidates})
-
-
-@app.get("/table", response_class=HTMLResponse)
-def table_view(request: Request, session: Session = Depends(get_session)):
-    """Table view of all candidates and tasks"""
-    candidates = session.exec(select(Candidate)).all()
-
-    task_info = {}
-    for candidate in candidates:
-        workflow = workflow_loader.get_workflow(candidate.workflow_id)
-        if not workflow:
-            continue
-
-        layout, _ = compute_dag_layout(workflow)
-
-        for task_def in workflow.tasks:
-            if task_def.identifier not in task_info:
-                task_info[task_def.identifier] = {
-                    'name': task_def.name,
-                    'workflows': set(),
-                    'min_layer': float('inf')
-                }
-
-            task_info[task_def.identifier]['workflows'].add(candidate.workflow_id)
-            layer = layout.get(task_def.identifier, {}).get('layer', 0)
-            task_info[task_def.identifier]['min_layer'] = min(
-                task_info[task_def.identifier]['min_layer'],
-                layer
-            )
-
-    sorted_tasks = sorted(
-        task_info.items(),
-        key=lambda x: (x[1]['min_layer'], -len(x[1]['workflows']), x[0])
-    )
-
-    candidate_data = []
-    for candidate in candidates:
-        workflow = workflow_loader.get_workflow(candidate.workflow_id)
-        if not workflow:
-            continue
-
-        workflow_task_ids = {t.identifier for t in workflow.tasks}
-
-        # Get actual Task instances for this candidate
-        task_links = session.exec(
-            select(TaskCandidateLink).where(TaskCandidateLink.candidate_email == candidate.email)
-        ).all()
-        task_ids = [link.task_id for link in task_links]
-
-        candidate_tasks = []
-        if task_ids:
-            candidate_tasks = session.exec(
-                select(Task).where(Task.id.in_(task_ids))
-            ).all()
-
-        # Build status map by template_id (ONLY for tasks that exist)
-        task_status = {}
-        for task in candidate_tasks:
-            if task.template_id and task.template_id in workflow_task_ids:
-                task_status[task.template_id] = task
-
-        # Build task_states for this candidate
-        task_states = {}
-        for task_identifier, _ in sorted_tasks:
-            if task_identifier not in workflow_task_ids:
-                # Task not in this candidate's workflow
-                task_states[task_identifier] = None
-            else:
-                # Task is in this candidate's workflow
-                ct = task_status.get(task_identifier)
-                if ct:  # Task exists
-                    task_states[task_identifier] = {
-                        'state': ct.status or TaskStatus.TODO,
-                        'exists': True,
-                        'task_id': ct.id
-                    }
-                else:  # Task doesn't exist yet but is in workflow
-                    task_states[task_identifier] = {
-                        'state': TaskStatus.TODO,
-                        'exists': False,
-                        'task_id': None
-                    }
-
-        candidate_data.append({
-            'candidate': candidate,
-            'task_states': task_states
-        })
-
-    return templates.TemplateResponse("table_view.html", {
-        "request": request,
-        "candidate_data": candidate_data,
-        "sorted_tasks": sorted_tasks
-    })
+# HTML View Routes (extracted to src/routes/web/)
 
 
 @app.get("/candidate/add", response_class=HTMLResponse)
