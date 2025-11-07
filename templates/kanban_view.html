@@ -531,9 +531,9 @@ selectDropdown.addEventListener('click', (e) => {
 
         // Navigate to the filtered URL
         if (value) {
-            window.location.href = `/tasks/kanban?candidate_email=${encodeURIComponent(value)}`;
+            window.location.href = `/kanban?candidate_email=${encodeURIComponent(value)}`;
         } else {
-            window.location.href = '/tasks/kanban';
+            window.location.href = '/kanban';
         }
     }
 });
