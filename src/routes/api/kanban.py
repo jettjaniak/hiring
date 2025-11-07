@@ -3,6 +3,7 @@ Kanban API routes
 """
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
+from typing import Optional
 from ...models import Task, TaskCandidateLink, Candidate, TaskStatus
 from ...dependencies import get_session
 
@@ -10,8 +11,19 @@ router = APIRouter(prefix="/api/tasks/kanban", tags=["kanban"])
 
 
 @router.get("")
-def get_kanban_data(session: Session = Depends(get_session)):
-    """Get tasks grouped by status for kanban view"""
+def get_kanban_data(
+    candidate_email: Optional[str] = None,
+    session: Session = Depends(get_session)
+):
+    """
+    Get tasks grouped by status for kanban view
+
+    Args:
+        candidate_email: Optional email to filter tasks by candidate.
+                        Use "unassigned" to show tasks with no candidates.
+                        Omit to show all tasks.
+    """
+    # Get all tasks
     tasks = session.exec(select(Task)).all()
 
     # Group tasks by status
@@ -27,6 +39,17 @@ def get_kanban_data(session: Session = Depends(get_session)):
             select(TaskCandidateLink).where(TaskCandidateLink.task_id == task.id)
         ).all()
         candidate_emails = [link.candidate_email for link in links]
+
+        # Apply filtering based on candidate_email parameter
+        if candidate_email is not None:
+            if candidate_email == "unassigned":
+                # Show only tasks with no candidates
+                if len(candidate_emails) > 0:
+                    continue
+            else:
+                # Show only tasks for specific candidate
+                if candidate_email not in candidate_emails:
+                    continue
 
         # Get candidate names
         candidates = []

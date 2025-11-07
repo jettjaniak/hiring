@@ -4,7 +4,8 @@ Database models for local storage
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
-from sqlalchemy import Text
+from sqlalchemy import Text, event
+from sqlalchemy.orm import Session as SASession
 
 from src.constants import TaskStatus
 
@@ -161,3 +162,69 @@ class TaskCandidateLink(SQLModel, table=True):
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# Validation: Template-based tasks must have exactly one candidate
+@event.listens_for(SASession, "before_flush")
+def validate_template_task_candidates(session, flush_context, instances):
+    """
+    Validate that template-based tasks have exactly one candidate.
+    Ad-hoc tasks (template_id is None) can have any number of candidates.
+    """
+    from sqlalchemy import select as sa_select
+
+    # Check all new and modified Task objects
+    for obj in session.new | session.dirty:
+        if isinstance(obj, Task) and obj.template_id is not None:
+            # This is a template-based task - must have exactly 1 candidate
+            # Count the candidate links for this task
+            if obj.id is not None:  # Only check if task has been assigned an ID
+                link_count = session.execute(
+                    sa_select(TaskCandidateLink).where(TaskCandidateLink.task_id == obj.id)
+                ).scalars().all()
+
+                num_candidates = len(link_count)
+
+                if num_candidates == 0:
+                    raise ValueError(
+                        f"Template-based task '{obj.title}' (template_id='{obj.template_id}') must have exactly one candidate assigned. "
+                        f"Currently has 0 candidates."
+                    )
+                elif num_candidates > 1:
+                    candidate_emails = [link.candidate_email for link in link_count]
+                    raise ValueError(
+                        f"Template-based task '{obj.title}' (template_id='{obj.template_id}') must have exactly one candidate assigned. "
+                        f"Currently has {num_candidates} candidates: {', '.join(candidate_emails)}. "
+                        f"Create separate tasks for each candidate instead."
+                    )
+
+    # Also check when TaskCandidateLink objects are added/removed
+    for obj in session.new | session.deleted:
+        if isinstance(obj, TaskCandidateLink):
+            # Get the associated task
+            task = session.get(Task, obj.task_id)
+            if task and task.template_id is not None:
+                # Count links after this flush would complete
+                existing_links = session.execute(
+                    sa_select(TaskCandidateLink).where(TaskCandidateLink.task_id == obj.task_id)
+                ).scalars().all()
+
+                # Adjust count based on whether we're adding or deleting
+                if obj in session.new:
+                    # Adding a link
+                    num_candidates = len(existing_links) + 1
+                else:
+                    # Deleting a link
+                    num_candidates = len(existing_links) - 1
+
+                if num_candidates == 0:
+                    raise ValueError(
+                        f"Cannot remove the last candidate from template-based task '{task.title}' (template_id='{task.template_id}'). "
+                        f"Template-based tasks must have exactly one candidate."
+                    )
+                elif num_candidates > 1:
+                    raise ValueError(
+                        f"Cannot add another candidate to template-based task '{task.title}' (template_id='{task.template_id}'). "
+                        f"Template-based tasks must have exactly one candidate. "
+                        f"Create a separate task for each candidate instead."
+                    )

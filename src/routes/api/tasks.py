@@ -54,6 +54,15 @@ def spawn_task(
     if not template:
         raise HTTPException(status_code=404, detail=f"Template {request.template_id} not found")
 
+    # Template-based tasks must have exactly one candidate
+    if len(request.candidate_emails) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Template-based tasks must be created for exactly one candidate. "
+                   f"You provided {len(request.candidate_emails)} candidates. "
+                   f"To create tasks for multiple candidates, call this endpoint once per candidate."
+        )
+
     # Validate all candidates exist
     for email in request.candidate_emails:
         candidate = session.get(Candidate, email)

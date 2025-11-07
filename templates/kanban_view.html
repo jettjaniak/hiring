@@ -226,22 +226,27 @@
 </div>
 
 <script>
-// Store full kanban data globally for filtering
-let fullKanbanData = {};
+// Get current filter from URL query parameter
+function getCurrentFilter() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('candidate_email') || '';
+}
 
 // Fetch and display kanban data
 async function loadKanbanData() {
     try {
-        const response = await fetch('/api/tasks/kanban');
+        const candidateEmail = getCurrentFilter();
+        const url = candidateEmail
+            ? `/api/tasks/kanban?candidate_email=${encodeURIComponent(candidateEmail)}`
+            : '/api/tasks/kanban';
+
+        const response = await fetch(url);
         const data = await response.json();
 
-        // Store data globally
-        fullKanbanData = data;
-
         // Update candidate filter dropdown
-        updateCandidateFilter(data);
+        await updateCandidateFilter();
 
-        // Display all data (or filtered if a filter is selected)
+        // Display data
         displayKanbanData(data);
     } catch (error) {
         console.error('Error loading kanban data:', error);
@@ -249,45 +254,90 @@ async function loadKanbanData() {
 }
 
 // Update the candidate filter dropdown with unique candidates
-function updateCandidateFilter(data) {
-    const candidatesMap = new Map(); // Use Map to track unique candidates by email
+async function updateCandidateFilter() {
+    try {
+        // Fetch all kanban data (unfiltered) to get all candidates
+        const response = await fetch('/api/tasks/kanban');
+        const data = await response.json();
 
-    // Extract all unique candidates from all tasks
-    for (const [status, tasks] of Object.entries(data)) {
-        tasks.forEach(task => {
-            if (task.candidates && task.candidates.length > 0) {
-                task.candidates.forEach(candidate => {
-                    const key = candidate.email || candidate.name;
-                    if (!candidatesMap.has(key)) {
-                        candidatesMap.set(key, candidate);
-                    }
-                });
-            }
+        const candidatesMap = new Map(); // Use Map to track unique candidates by email
+
+        // Extract all unique candidates from all tasks
+        for (const [status, tasks] of Object.entries(data)) {
+            tasks.forEach(task => {
+                if (task.candidates && task.candidates.length > 0) {
+                    task.candidates.forEach(candidate => {
+                        const key = candidate.email || candidate.name;
+                        if (!candidatesMap.has(key)) {
+                            candidatesMap.set(key, candidate);
+                        }
+                    });
+                }
+            });
+        }
+
+        // Get the dropdown element
+        const dropdown = document.getElementById('selectDropdown');
+        const currentFilter = getCurrentFilter();
+
+        // Start with "All Candidates" option
+        dropdown.innerHTML = '<div class="select-option" data-value="">All Candidates</div>';
+
+        // Add "Unassigned Tasks" option
+        const unassignedOption = document.createElement('div');
+        unassignedOption.className = 'select-option';
+        unassignedOption.dataset.value = 'unassigned';
+        unassignedOption.textContent = 'Unassigned Tasks';
+        unassignedOption.style.backgroundColor = '#f5f5f5';
+        unassignedOption.style.color = '#666';
+        dropdown.appendChild(unassignedOption);
+
+        // Add candidate options with colors
+        candidatesMap.forEach((candidate, key) => {
+            const option = document.createElement('div');
+            option.className = 'select-option';
+            option.dataset.value = key;
+            option.textContent = candidate.name;
+
+            // Apply the same color scheme as badges
+            const bgColor = getColorFromHash(key, true);
+            const textColor = getColorFromHash(key, false);
+
+            option.style.backgroundColor = bgColor;
+            option.style.color = textColor;
+
+            dropdown.appendChild(option);
         });
+
+        // Update the selected text to match current filter
+        const selectedText = document.getElementById('selectedText');
+        if (currentFilter === '') {
+            selectedText.textContent = 'All Candidates';
+            selectedText.style.backgroundColor = '';
+            selectedText.style.color = '';
+            selectedText.style.padding = '';
+            selectedText.style.borderRadius = '';
+        } else if (currentFilter === 'unassigned') {
+            selectedText.textContent = 'Unassigned Tasks';
+            selectedText.style.backgroundColor = '#f5f5f5';
+            selectedText.style.color = '#666';
+            selectedText.style.padding = '3px 8px';
+            selectedText.style.borderRadius = '4px';
+        } else {
+            const candidate = candidatesMap.get(currentFilter);
+            if (candidate) {
+                selectedText.textContent = candidate.name;
+                const bgColor = getColorFromHash(currentFilter, true);
+                const textColor = getColorFromHash(currentFilter, false);
+                selectedText.style.backgroundColor = bgColor;
+                selectedText.style.color = textColor;
+                selectedText.style.padding = '3px 8px';
+                selectedText.style.borderRadius = '4px';
+            }
+        }
+    } catch (error) {
+        console.error('Error updating candidate filter:', error);
     }
-
-    // Get the dropdown element
-    const dropdown = document.getElementById('selectDropdown');
-
-    // Keep only the "All Candidates" option
-    dropdown.innerHTML = '<div class="select-option" data-value="">All Candidates</div>';
-
-    // Add candidate options with colors
-    candidatesMap.forEach((candidate, key) => {
-        const option = document.createElement('div');
-        option.className = 'select-option';
-        option.dataset.value = key;
-        option.textContent = candidate.name;
-
-        // Apply the same color scheme as badges
-        const bgColor = getColorFromHash(key, true);
-        const textColor = getColorFromHash(key, false);
-
-        option.style.backgroundColor = bgColor;
-        option.style.color = textColor;
-
-        dropdown.appendChild(option);
-    });
 }
 
 // Display kanban data with optional filtering
@@ -457,38 +507,6 @@ async function handleDrop(e) {
     return false;
 }
 
-// Filter tasks by selected candidate
-let selectedFilterValue = '';
-
-function filterByCandidate(filterValue) {
-    selectedFilterValue = filterValue;
-
-    if (!filterValue) {
-        // Show all tasks
-        displayKanbanData(fullKanbanData);
-        return;
-    }
-
-    // Filter tasks to only show those with the selected candidate
-    const filteredData = {};
-
-    for (const [status, tasks] of Object.entries(fullKanbanData)) {
-        filteredData[status] = tasks.filter(task => {
-            if (!task.candidates || task.candidates.length === 0) {
-                return false;
-            }
-
-            // Check if any candidate matches the filter value
-            return task.candidates.some(candidate => {
-                const key = candidate.email || candidate.name;
-                return key === filterValue;
-            });
-        });
-    }
-
-    displayKanbanData(filteredData);
-}
-
 // Custom dropdown event handlers
 const selectButton = document.getElementById('selectButton');
 const selectDropdown = document.getElementById('selectDropdown');
@@ -510,27 +528,13 @@ selectDropdown.addEventListener('click', (e) => {
     const option = e.target.closest('.select-option');
     if (option) {
         const value = option.dataset.value;
-        const text = option.textContent;
 
-        selectedText.textContent = text;
-
-        // Apply the selected option's color to the button text
+        // Navigate to the filtered URL
         if (value) {
-            const bgColor = getColorFromHash(value, true);
-            const textColor = getColorFromHash(value, false);
-            selectedText.style.backgroundColor = bgColor;
-            selectedText.style.color = textColor;
-            selectedText.style.padding = '3px 8px';
-            selectedText.style.borderRadius = '4px';
+            window.location.href = `/tasks/kanban?candidate_email=${encodeURIComponent(value)}`;
         } else {
-            selectedText.style.backgroundColor = '';
-            selectedText.style.color = '';
-            selectedText.style.padding = '';
-            selectedText.style.borderRadius = '';
+            window.location.href = '/tasks/kanban';
         }
-
-        selectDropdown.classList.remove('open');
-        filterByCandidate(value);
     }
 });
 
