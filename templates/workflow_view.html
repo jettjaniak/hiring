@@ -62,7 +62,7 @@
                             </a>
                             {% endif %}
                             {% if task_info.special_action %}
-                            <a href="/action/{{ task_info.special_action }}?candidate={{ candidate.email|urlencode }}&task={{ task_info.definition.identifier|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333;">
+                            <a href="/actions/special/{{ task_info.special_action }}?candidate={{ candidate.email|urlencode }}&task={{ task_info.definition.identifier|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333;">
                                 <strong>{{ task_info.special_action.replace('_', ' ').title() }}</strong>
                                 <br><small style="color: #666;">Special action</small>
                             </a>

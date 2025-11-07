@@ -6,7 +6,7 @@
 <div class="form-container">
     <h2>Fill Background Check for {{ candidate.name or candidate.email }}</h2>
 
-    <form method="post" action="/action/fill_background_check">
+    <form method="post" action="/actions/special/fill_background_check">
         <input type="hidden" name="candidate" value="{{ candidate.email }}">
         <input type="hidden" name="task" value="{{ task_id }}">
 

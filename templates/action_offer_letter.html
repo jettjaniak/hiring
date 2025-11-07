@@ -6,7 +6,7 @@
 <div class="form-container">
     <h2>Fill Offer Letter for {{ candidate.name or candidate.email }}</h2>
 
-    <form method="post" action="/action/fill_offer_letter">
+    <form method="post" action="/actions/special/fill_offer_letter">
         <input type="hidden" name="candidate" value="{{ candidate.email }}">
         <input type="hidden" name="task" value="{{ task_id }}">
 
