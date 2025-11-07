@@ -19,7 +19,7 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 router = APIRouter(tags=["web-checklists"])
 
 
-@router.get("/checklists", response_class=HTMLResponse)
+@router.get("/actions/checklist-templates", response_class=HTMLResponse)
 def checklists_page(request: Request, session: Session = Depends(get_session)):
     """List all checklists"""
     statement = select(Checklist).order_by(Checklist.name)
@@ -38,7 +38,7 @@ def checklists_page(request: Request, session: Session = Depends(get_session)):
     })
 
 
-@router.get("/checklists/add", response_class=HTMLResponse)
+@router.get("/actions/checklist-templates/add", response_class=HTMLResponse)
 def add_checklist_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new checklist"""
     # Get all tasks
@@ -59,7 +59,7 @@ def add_checklist_page(request: Request, session: Session = Depends(get_session)
     })
 
 
-@router.post("/checklists/add")
+@router.post("/actions/checklist-templates/add")
 def add_checklist(
     request: Request,
     checklist_id: str = Form(...),
@@ -102,10 +102,10 @@ def add_checklist(
     session.add(checklist)
     session.commit()
 
-    return RedirectResponse(url="/checklists", status_code=302)
+    return RedirectResponse(url="/actions/checklist-templates", status_code=302)
 
 
-@router.get("/checklists/{checklist_id}/edit", response_class=HTMLResponse)
+@router.get("/actions/checklist-templates/{checklist_id}/edit", response_class=HTMLResponse)
 def edit_checklist_page(checklist_id: str, request: Request, session: Session = Depends(get_session)):
     """Show form to edit checklist"""
     checklist = session.get(Checklist, checklist_id)
@@ -128,7 +128,7 @@ def edit_checklist_page(checklist_id: str, request: Request, session: Session = 
     })
 
 
-@router.post("/checklists/{checklist_id}/edit")
+@router.post("/actions/checklist-templates/{checklist_id}/edit")
 def edit_checklist(
     checklist_id: str,
     request: Request,
@@ -154,23 +154,23 @@ def edit_checklist(
     session.add(checklist)
     session.commit()
 
-    return RedirectResponse(url="/checklists", status_code=302)
+    return RedirectResponse(url="/actions/checklist-templates", status_code=302)
 
 
-@router.post("/checklists/{checklist_id}/delete")
+@router.post("/actions/checklist-templates/{checklist_id}/delete")
 def delete_checklist_form(checklist_id: str, session: Session = Depends(get_session)):
     """Delete checklist"""
     checklist = session.get(Checklist, checklist_id)
     if not checklist:
-        return RedirectResponse(url="/checklists", status_code=302)
+        return RedirectResponse(url="/actions/checklist-templates", status_code=302)
 
     session.delete(checklist)
     session.commit()
 
-    return RedirectResponse(url="/checklists", status_code=302)
+    return RedirectResponse(url="/actions/checklist-templates", status_code=302)
 
 
-@router.get("/candidate/{candidate_email}/checklist/{checklist_id}", response_class=HTMLResponse)
+@router.get("/actions/checklists/{candidate_email}/{checklist_id}", response_class=HTMLResponse)
 def view_checklist(
     candidate_email: str,
     checklist_id: str,
@@ -226,7 +226,7 @@ def view_checklist(
     })
 
 
-@router.post("/candidate/{candidate_email}/checklist/{checklist_id}/update")
+@router.post("/actions/checklists/{candidate_email}/{checklist_id}/update")
 def update_checklist_state(
     candidate_email: str,
     checklist_id: str,
@@ -269,6 +269,6 @@ def update_checklist_state(
     session.commit()
 
     return RedirectResponse(
-        url=f"/candidate/{candidate_email}/checklist/{checklist_id}",
+        url=f"/actions/checklists/{candidate_email}/{checklist_id}",
         status_code=302
     )

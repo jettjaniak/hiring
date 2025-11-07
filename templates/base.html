@@ -10,13 +10,17 @@
     <header>
         <h1>Hiring Process Management</h1>
         <nav>
-            <a href="/">Candidates</a>
-            <a href="/candidate/add">Add Candidate</a>
-            <a href="/tasks">Tasks</a>
-            <a href="/tasks/kanban">Kanban</a>
-            <a href="/templates">Email Templates</a>
-            <a href="/checklists">Checklists</a>
-            <a href="/email/send">Send Email</a>
+            <a href="/candidates">Candidates</a>
+            <a href="/task-templates">Task Templates</a>
+            <a href="/kanban">Kanban</a>
+            <div class="dropdown">
+                <span class="dropdown-toggle">Actions ▼</span>
+                <div class="dropdown-menu">
+                    <a href="/actions/email-templates">Email Templates</a>
+                    <a href="/actions/checklist-templates">Checklist Templates</a>
+                    <a href="/actions/send-email">Send Email</a>
+                </div>
+            </div>
         </nav>
     </header>
 

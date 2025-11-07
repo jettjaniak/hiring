@@ -16,7 +16,7 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 router = APIRouter(tags=["web-kanban"])
 
 
-@router.get("/tasks/kanban", response_class=HTMLResponse)
+@router.get("/kanban", response_class=HTMLResponse)
 def view_kanban(request: Request, session: Session = Depends(get_session)):
     """Render kanban board view"""
     return templates.TemplateResponse(

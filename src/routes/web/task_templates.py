@@ -19,7 +19,7 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 router = APIRouter(tags=["web-task-templates"])
 
 
-@router.get("/tasks", response_class=HTMLResponse)
+@router.get("/task-templates", response_class=HTMLResponse)
 def tasks_page(request: Request, session: Session = Depends(get_session)):
     """List all tasks"""
     statement = select(TaskTemplate).order_by(TaskTemplate.name)
@@ -47,7 +47,7 @@ def tasks_page(request: Request, session: Session = Depends(get_session)):
     })
 
 
-@router.get("/tasks/add", response_class=HTMLResponse)
+@router.get("/task-templates/add", response_class=HTMLResponse)
 def add_task_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new task"""
     # Get all email templates for linking
@@ -62,7 +62,7 @@ def add_task_page(request: Request, session: Session = Depends(get_session)):
     })
 
 
-@router.post("/tasks/add")
+@router.post("/task-templates/add")
 def add_task(
     request: Request,
     task_id: str = Form(...),
@@ -98,10 +98,10 @@ def add_task(
             session.add(link)
         session.commit()
 
-    return RedirectResponse(url="/tasks", status_code=302)
+    return RedirectResponse(url="/task-templates", status_code=302)
 
 
-@router.get("/tasks/{task_id}/edit", response_class=HTMLResponse)
+@router.get("/task-templates/{task_id}/edit", response_class=HTMLResponse)
 def edit_task_page(task_id: str, request: Request, session: Session = Depends(get_session)):
     """Show form to edit task"""
     task = session.get(TaskTemplate, task_id)
@@ -126,7 +126,7 @@ def edit_task_page(task_id: str, request: Request, session: Session = Depends(ge
     })
 
 
-@router.post("/tasks/{task_id}/edit")
+@router.post("/task-templates/{task_id}/edit")
 def edit_task(
     task_id: str,
     request: Request,
@@ -168,17 +168,17 @@ def edit_task(
             session.add(link)
         session.commit()
 
-    return RedirectResponse(url="/tasks", status_code=302)
+    return RedirectResponse(url="/task-templates", status_code=302)
 
 
-@router.post("/tasks/{task_id}/delete")
+@router.post("/task-templates/{task_id}/delete")
 def delete_task_form(task_id: str, session: Session = Depends(get_session)):
     """Delete task"""
     task = session.get(TaskTemplate, task_id)
     if not task:
-        return RedirectResponse(url="/tasks", status_code=302)
+        return RedirectResponse(url="/task-templates", status_code=302)
 
     session.delete(task)
     session.commit()
 
-    return RedirectResponse(url="/tasks", status_code=302)
+    return RedirectResponse(url="/task-templates", status_code=302)

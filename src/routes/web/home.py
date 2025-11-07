@@ -2,7 +2,7 @@
 Home and dashboard web UI routes
 """
 from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 from pathlib import Path
@@ -21,8 +21,14 @@ router = APIRouter(tags=["web-home"])
 workflow_loader = None
 
 
-@router.get("/", response_class=HTMLResponse)
-def index(request: Request, session: Session = Depends(get_session)):
+@router.get("/")
+def index():
+    """Redirect to kanban view"""
+    return RedirectResponse(url="/kanban", status_code=302)
+
+
+@router.get("/candidates", response_class=HTMLResponse)
+def candidates_list(request: Request, session: Session = Depends(get_session)):
     """List all candidates"""
     candidates = session.exec(select(Candidate)).all()
     return templates.TemplateResponse("index.html", {"request": request, "candidates": candidates})

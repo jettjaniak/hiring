@@ -17,7 +17,7 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 router = APIRouter(tags=["web-special-actions"])
 
 
-@router.get("/action/fill_offer_letter", response_class=HTMLResponse)
+@router.get("/actions/special/fill_offer_letter", response_class=HTMLResponse)
 def fill_offer_letter_form(
     request: Request,
     candidate: str,
@@ -53,7 +53,7 @@ def fill_offer_letter_form(
     })
 
 
-@router.post("/action/fill_offer_letter")
+@router.post("/actions/special/fill_offer_letter")
 async def generate_offer_letter(
     request: Request,
     candidate: str = Form(...),
@@ -92,7 +92,7 @@ async def generate_offer_letter(
     )
 
 
-@router.get("/action/fill_background_check", response_class=HTMLResponse)
+@router.get("/actions/special/fill_background_check", response_class=HTMLResponse)
 def fill_background_check_form(
     request: Request,
     candidate: str,
@@ -129,7 +129,7 @@ def fill_background_check_form(
     })
 
 
-@router.post("/action/fill_background_check")
+@router.post("/actions/special/fill_background_check")
 async def generate_background_check(
     request: Request,
     candidate: str = Form(...),

@@ -22,7 +22,7 @@ templates = Jinja2Templates(directory=str(project_root / "templates"))
 router = APIRouter(tags=["web-email-templates"])
 
 
-@router.get("/templates", response_class=HTMLResponse)
+@router.get("/actions/email-templates", response_class=HTMLResponse)
 def email_templates_page(request: Request, session: Session = Depends(get_session)):
     """List all email templates"""
     statement = select(EmailTemplate).order_by(EmailTemplate.name)
@@ -34,7 +34,7 @@ def email_templates_page(request: Request, session: Session = Depends(get_sessio
     })
 
 
-@router.get("/template/add", response_class=HTMLResponse)
+@router.get("/actions/email-templates/add", response_class=HTMLResponse)
 def add_email_template_page(request: Request, session: Session = Depends(get_session)):
     """Show form to add new email template"""
     # Get all tasks for linking
@@ -49,7 +49,7 @@ def add_email_template_page(request: Request, session: Session = Depends(get_ses
     })
 
 
-@router.post("/template/add")
+@router.post("/actions/email-templates/add")
 def add_email_template(
     request: Request,
     name: str = Form(...),
@@ -93,10 +93,10 @@ def add_email_template(
             session.add(link)
         session.commit()
 
-    return RedirectResponse(url="/templates", status_code=302)
+    return RedirectResponse(url="/actions/email-templates", status_code=302)
 
 
-@router.get("/template/{template_id}/edit", response_class=HTMLResponse)
+@router.get("/actions/email-templates/{template_id}/edit", response_class=HTMLResponse)
 def edit_email_template_page(template_id: str, request: Request, session: Session = Depends(get_session)):
     """Show form to edit email template"""
     email_template = session.get(EmailTemplate, template_id)
@@ -121,7 +121,7 @@ def edit_email_template_page(template_id: str, request: Request, session: Sessio
     })
 
 
-@router.post("/template/{template_id}/edit")
+@router.post("/actions/email-templates/{template_id}/edit")
 def edit_email_template(
     template_id: str,
     request: Request,
@@ -177,23 +177,23 @@ def edit_email_template(
             session.add(link)
         session.commit()
 
-    return RedirectResponse(url="/templates", status_code=302)
+    return RedirectResponse(url="/actions/email-templates", status_code=302)
 
 
-@router.post("/template/{template_id}/delete")
+@router.post("/actions/email-templates/{template_id}/delete")
 def delete_email_template(template_id: str, session: Session = Depends(get_session)):
     """Delete email template"""
     email_template = session.get(EmailTemplate, template_id)
     if not email_template:
-        return RedirectResponse(url="/templates", status_code=302)
+        return RedirectResponse(url="/actions/email-templates", status_code=302)
 
     session.delete(email_template)
     session.commit()
 
-    return RedirectResponse(url="/templates", status_code=302)
+    return RedirectResponse(url="/actions/email-templates", status_code=302)
 
 
-@router.get("/email/send", response_class=HTMLResponse)
+@router.get("/actions/send-email", response_class=HTMLResponse)
 def email_send_page(request: Request, session: Session = Depends(get_session)):
     """Page to select candidate and template for composing email"""
     # Load all candidates and templates
@@ -210,7 +210,7 @@ def email_send_page(request: Request, session: Session = Depends(get_session)):
     })
 
 
-@router.get("/email/compose/{template_id}", response_class=HTMLResponse)
+@router.get("/actions/send-email/{template_id}", response_class=HTMLResponse)
 def compose_email(template_id: str, request: Request, session: Session = Depends(get_session)):
     """Compose email using template with dynamic variable substitution"""
     # Load template
