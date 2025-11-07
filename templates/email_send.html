@@ -113,7 +113,7 @@ function composeEmail() {
     const templateId = document.getElementById('template-select').value;
 
     if (candidateId && templateId) {
-        window.location.href = `/email/compose/${templateId}?candidate=${candidateId}`;
+        window.location.href = `/actions/send-email/${templateId}?candidate=${candidateId}`;
     }
 }
 

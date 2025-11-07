@@ -46,7 +46,7 @@
                         </button>
                         <div id="menu-{{ task_info.definition.identifier }}" style="display: none; position: absolute; background-color: white; border: 1px solid #ddd; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 200px; margin-top: 4px;">
                             {% for template in task_info.email_templates %}
-                            <a href="/email/compose/{{ template.id }}?candidate={{ candidate.email|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
+                            <a href="/actions/send-email/{{ template.id }}?candidate={{ candidate.email|urlencode }}" target="_blank" style="display: block; padding: 10px 16px; text-decoration: none; color: #333; border-bottom: 1px solid #eee;">
                                 <strong>{{ template.name }}</strong>
                                 {% if template.description %}
                                 <br><small style="color: #666;">{{ template.description }}</small>
