@@ -6,7 +6,7 @@
 <div class="form-container">
     <h2>{{ 'Edit' if mode == 'edit' else 'Add' }} Task</h2>
 
-    <form method="post" action="{{ '/tasks/' + task.task_id + '/edit' if mode == 'edit' else '/tasks/add' }}" id="taskForm">
+    <form method="post" action="{{ '/task-templates/' + task.task_id + '/edit' if mode == 'edit' else '/task-templates/add' }}" id="taskForm">
         <div class="form-group">
             <label for="task_id">Task ID *</label>
             <input type="text" id="task_id" name="task_id" value="{{ task.task_id if task else '' }}" required {{ 'readonly' if mode == 'edit' else '' }}>
@@ -58,7 +58,7 @@
                     </div>
                     {% endfor %}
                 {% else %}
-                    <p style="color: #999; margin: 0;">No email templates available. <a href="/template/add">Create one</a></p>
+                    <p style="color: #999; margin: 0;">No email templates available. <a href="/actions/email-templates/add">Create one</a></p>
                 {% endif %}
             </div>
             <small style="display: block; margin-top: 5px; color: #666;">
@@ -68,7 +68,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn">{{ 'Save Changes' if mode == 'edit' else 'Create Task' }}</button>
-            <a href="/tasks" class="btn btn-secondary">Cancel</a>
+            <a href="/task-templates" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>
