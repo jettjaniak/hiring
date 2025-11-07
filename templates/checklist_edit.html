@@ -6,7 +6,7 @@
 <div class="form-container">
     <h2>{{ 'Edit' if mode == 'edit' else 'Add' }} Checklist</h2>
 
-    <form method="post" action="{{ '/checklists/' + checklist.id + '/edit' if mode == 'edit' else '/checklists/add' }}" id="checklistForm">
+    <form method="post" action="{{ '/actions/checklist-templates/' + checklist.id + '/edit' if mode == 'edit' else '/actions/checklist-templates/add' }}" id="checklistForm">
         <div class="form-group">
             <label for="checklist_id">Checklist ID *</label>
             <input type="text" id="checklist_id" name="checklist_id" value="{{ checklist.id if checklist else '' }}" required {{ 'readonly' if mode == 'edit' else '' }}>
@@ -40,7 +40,7 @@
             </small>
             {% if not available_tasks %}
             <p style="color: #e74c3c; margin-top: 10px;">
-                No available tasks without checklists. All tasks already have checklists or no tasks exist. <a href="/tasks/add">Create a new task</a>
+                No available tasks without checklists. All tasks already have checklists or no tasks exist. <a href="/task-templates/add">Create a new task</a>
             </p>
             {% endif %}
         </div>
@@ -70,7 +70,7 @@
 
         <div class="form-actions">
             <button type="submit" class="btn" {% if mode == 'add' and not available_tasks %}disabled{% endif %}>{{ 'Save Changes' if mode == 'edit' else 'Create Checklist' }}</button>
-            <a href="/checklists" class="btn btn-secondary">Cancel</a>
+            <a href="/actions/checklist-templates" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
 </div>

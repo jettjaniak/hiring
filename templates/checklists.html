@@ -7,7 +7,7 @@
     <h2>Checklists</h2>
     <div>
         <a href="/" class="btn btn-secondary">Back to Candidates</a>
-        <a href="/checklists/add" class="btn">Add Checklist</a>
+        <a href="/actions/checklist-templates/add" class="btn">Add Checklist</a>
     </div>
 </div>
 
@@ -39,8 +39,8 @@
                     {% endif %}
                 </td>
                 <td>
-                    <a href="/checklists/{{ checklist.id }}/edit" class="btn btn-small">Edit</a>
-                    <form action="/checklists/{{ checklist.id }}/delete" method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this checklist?');">
+                    <a href="/actions/checklist-templates/{{ checklist.id }}/edit" class="btn btn-small">Edit</a>
+                    <form action="/actions/checklist-templates/{{ checklist.id }}/delete" method="post" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this checklist?');">
                         <button type="submit" class="btn btn-small btn-danger">Delete</button>
                     </form>
                 </td>
@@ -50,7 +50,7 @@
     </table>
 </div>
 {% else %}
-<p>No checklists yet. <a href="/checklists/add">Add your first checklist</a></p>
+<p>No checklists yet. <a href="/actions/checklist-templates/add">Add your first checklist</a></p>
 {% endif %}
 
 {% endblock %}
