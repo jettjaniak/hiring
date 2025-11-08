@@ -146,9 +146,16 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
         # Get linked checklist for this task
         linked_checklist = task_checklist_map.get(task_def.identifier)
 
-        # Get database task record for special_action
+        # Get database task record for special_action and display_condition
         db_task = task_db_map.get(task_def.identifier)
         special_action = db_task.special_action if db_task else None
+
+        # Evaluate display condition - only for non-created tasks
+        from src.utils.conditions import safe_eval_condition
+        display_satisfied = True  # Default to True
+        # Only apply display condition if task hasn't been created yet
+        if ct is None and db_task and db_task.display_condition:
+            display_satisfied = safe_eval_condition(candidate, db_task.display_condition)
 
         task_info = {
             'definition': task_def,
@@ -158,7 +165,8 @@ def workflow_view(request: Request, candidate_id: str, session: Session = Depend
             'layout': layout.get(task_def.identifier, {'layer': 0, 'index': 0, 'total_in_layer': 1}),
             'email_templates': linked_templates,
             'checklist': linked_checklist,
-            'special_action': special_action
+            'special_action': special_action,
+            'display_satisfied': display_satisfied
         }
         tasks_with_status.append(task_info)
 

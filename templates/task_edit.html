@@ -39,6 +39,22 @@
         </div>
 
         <div class="form-group">
+            <label for="completion_condition">Completion Condition</label>
+            <textarea id="completion_condition" name="completion_condition" rows="2" placeholder="e.g., work_permit_verified">{{ task.completion_condition if task else '' }}</textarea>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Expression that must be true to mark task as done. Functions: today(), days_ago(n), days_from_now(n)
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="display_condition">Display Condition</label>
+            <textarea id="display_condition" name="display_condition" rows="2" placeholder="e.g., requires_visa">{{ task.display_condition if task else '' }}</textarea>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Expression that must be true to display task normally (otherwise strikethrough with grey button)
+            </small>
+        </div>
+
+        <div class="form-group">
             <label>Link Email Templates</label>
             <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px;">
                 {% if email_templates %}

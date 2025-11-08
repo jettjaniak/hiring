@@ -26,6 +26,12 @@ class Candidate(SQLModel, table=True):
     resume_url: Optional[str] = None
     notes: Optional[str] = Field(default=None, sa_column=Column(Text))
 
+    # Condition test fields (for demonstration)
+    work_permit_verified: Optional[bool] = None
+    background_check_date: Optional[str] = None  # ISO date string
+    requires_visa: Optional[bool] = None
+    visa_expiry: Optional[str] = None  # ISO date string
+
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -103,6 +109,10 @@ class TaskTemplate(SQLModel, table=True):
     name: str
     description: Optional[str] = Field(default=None, sa_column=Column(Text))
     special_action: Optional[str] = None  # Name of the special action view (e.g., "fill_offer_letter")
+
+    # Task conditions
+    completion_condition: Optional[str] = Field(default=None, sa_column=Column(Text))  # Expression for when task can be marked done
+    display_condition: Optional[str] = Field(default=None, sa_column=Column(Text))  # Expression for when task should be displayed
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -228,3 +238,79 @@ def validate_template_task_candidates(session, flush_context, instances):
                         f"Template-based tasks must have exactly one candidate. "
                         f"Create a separate task for each candidate instead."
                     )
+
+
+# Validation: TaskTemplate condition expressions must be valid
+@event.listens_for(SASession, "before_flush")
+def validate_task_template_conditions(session, flush_context, instances):
+    """
+    Validate that task template condition expressions are syntactically valid.
+    """
+    from src.utils.conditions import validate_condition_expression
+
+    for obj in session.new | session.dirty:
+        if isinstance(obj, TaskTemplate):
+            # Validate completion_condition if present
+            if obj.completion_condition:
+                is_valid, message = validate_condition_expression(obj.completion_condition)
+                if not is_valid:
+                    raise ValueError(
+                        f"Invalid completion_condition for task template '{obj.name}' (task_id='{obj.task_id}'): {message}"
+                    )
+
+            # Validate display_condition if present
+            if obj.display_condition:
+                is_valid, message = validate_condition_expression(obj.display_condition)
+                if not is_valid:
+                    raise ValueError(
+                        f"Invalid display_condition for task template '{obj.name}' (task_id='{obj.task_id}'): {message}"
+                    )
+
+
+# Validation: Task completion conditions must be satisfied before marking done
+@event.listens_for(SASession, "before_flush")
+def validate_task_completion_conditions(session, flush_context, instances):
+    """
+    Validate that completion conditions are satisfied when marking a template-based task as done.
+    This ensures the validation happens at the database level, regardless of which endpoint is used.
+    """
+    from sqlalchemy import select as sa_select, inspect
+    from src.utils.conditions import safe_eval_condition
+
+    for obj in session.dirty:
+        if isinstance(obj, Task):
+            # Only check if task has a template_id (template-based tasks)
+            if obj.template_id is None:
+                continue
+
+            # Check if status is being changed to "done"
+            # Use inspect to get attribute history
+            history = inspect(obj).attrs.status.history
+
+            # If status is being set to done (and it wasn't done before)
+            if obj.status == TaskStatus.DONE and (
+                history.has_changes() and TaskStatus.DONE not in (history.deleted or [])
+            ):
+                # Get the task template to access completion_condition
+                task_template = session.get(TaskTemplate, obj.template_id)
+
+                if task_template and task_template.completion_condition:
+                    # Get the candidate(s) for this task
+                    task_links = session.execute(
+                        sa_select(TaskCandidateLink).where(TaskCandidateLink.task_id == obj.id)
+                    ).scalars().all()
+
+                    if task_links:
+                        # Template-based tasks should have exactly one candidate (enforced by other validation)
+                        candidate_email = task_links[0].candidate_email
+                        candidate = session.get(Candidate, candidate_email)
+
+                        if candidate:
+                            # Evaluate completion condition
+                            completion_satisfied = safe_eval_condition(candidate, task_template.completion_condition)
+
+                            if not completion_satisfied:
+                                raise ValueError(
+                                    f"Cannot mark task '{obj.title}' as done: completion condition not satisfied. "
+                                    f"Condition: {task_template.completion_condition}"
+                                )

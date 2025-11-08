@@ -69,6 +69,8 @@ def add_task(
     name: str = Form(...),
     description: str = Form(""),
     special_action: str = Form(""),
+    completion_condition: str = Form(""),
+    display_condition: str = Form(""),
     template_ids: List[str] = Form([]),
     session: Session = Depends(get_session)
 ):
@@ -82,7 +84,9 @@ def add_task(
         task_id=task_id,
         name=name,
         description=description,
-        special_action=special_action if special_action else None
+        special_action=special_action if special_action else None,
+        completion_condition=completion_condition if completion_condition else None,
+        display_condition=display_condition if display_condition else None
     )
 
     session.add(task)
@@ -133,6 +137,8 @@ def edit_task(
     name: str = Form(...),
     description: str = Form(""),
     special_action: str = Form(""),
+    completion_condition: str = Form(""),
+    display_condition: str = Form(""),
     template_ids: List[str] = Form([]),
     session: Session = Depends(get_session)
 ):
@@ -144,6 +150,8 @@ def edit_task(
     task.name = name
     task.description = description
     task.special_action = special_action if special_action else None
+    task.completion_condition = completion_condition if completion_condition else None
+    task.display_condition = display_condition if display_condition else None
     task.updated_at = datetime.now(timezone.utc)
 
     session.add(task)

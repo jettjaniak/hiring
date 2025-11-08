@@ -2,6 +2,8 @@ id: senior_engineer_v2
 name: Senior Engineer
 description: Workflow for hiring senior engineers with complex evaluation paths
 tasks:
+- task_id: visa_check_test
+  dependencies: []
 - task_id: resume_review_v1
   dependencies: []
 - task_id: phone_screen_v1

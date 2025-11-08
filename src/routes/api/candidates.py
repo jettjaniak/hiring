@@ -220,6 +220,28 @@ def update_candidate_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # Check completion condition if status is being changed to "done"
+    if status is not None and status == TaskStatus.DONE:
+        # Get the candidate for condition evaluation
+        candidate = session.exec(
+            select(Candidate).where(Candidate.email == candidate_email)
+        ).first()
+
+        # Get the task template to access completion_condition
+        task_template = session.exec(
+            select(TaskTemplate).where(TaskTemplate.task_id == task_identifier)
+        ).first()
+
+        if task_template and task_template.completion_condition and candidate:
+            from src.utils.conditions import safe_eval_condition
+            completion_satisfied = safe_eval_condition(candidate, task_template.completion_condition)
+
+            if not completion_satisfied:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot mark task as done: completion condition not satisfied ({task_template.completion_condition})"
+                )
+
     # Update fields if provided
     if status is not None:
         task.status = status

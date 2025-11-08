@@ -25,7 +25,7 @@
     <svg class="dag-svg" id="dag-svg"></svg>
     <div class="task-grid" id="task-grid">
         {% for task_info in tasks %}
-        <div class="task-card {{ task_info.state }}"
+        <div class="task-card {{ task_info.state }}{% if not task_info.display_satisfied %} task-not-applicable{% endif %}"
              data-task-id="{{ task_info.definition.identifier }}"
              data-layer="{{ task_info.layout.layer }}"
              data-index="{{ task_info.layout.index }}"
@@ -33,11 +33,11 @@
              data-deps="{{ task_info.definition.dependencies | join(',') }}">
             <div class="task-info">
                 <div class="task-text">
-                    <div class="task-name">{{ task_info.definition.name }}</div>
+                    <div class="task-name"{% if not task_info.display_satisfied %} style="text-decoration: line-through;"{% endif %}>{{ task_info.definition.name }}</div>
                     <div class="task-identifier">{{ task_info.definition.identifier }}</div>
                 </div>
                 <div class="task-control">
-                    {{ render_task_control(candidate.email|urlencode, task_info.definition.identifier, task_info.state, task_info.exists) }}
+                    {{ render_task_control(candidate.email|urlencode, task_info.definition.identifier, task_info.state, task_info.exists, task_info.display_satisfied) }}
 
                     {% if task_info.email_templates or task_info.checklist or task_info.special_action %}
                     <div style="margin-top: 8px; position: relative;">
