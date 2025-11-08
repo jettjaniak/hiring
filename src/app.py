@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 # Get project root directory (parent of src/)
 project_root = Path(__file__).parent.parent
@@ -25,6 +26,7 @@ from src.routes.api.kanban import router as kanban_router
 from src.routes.api.tasks import router as tasks_router
 from src.routes.api.task_template_links import router as task_template_links_router
 from src.routes.api.checklists import router as checklists_api_router
+from src.routes.api.auth import router as auth_router
 from src.routes.web import home as home_routes
 from src.routes.web import candidates as candidate_routes
 from src.routes.web import email_templates as email_template_routes
@@ -65,10 +67,17 @@ app = FastAPI(
 templates = Jinja2Templates(directory=str(project_root / "templates"))
 app.mount("/static", StaticFiles(directory=str(project_root / "static")), name="static")
 
+# Add session middleware for authentication
+# In production, use a proper secret key from environment variable
+import secrets
+SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", secrets.token_hex(32))
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
 # Set up SQLAdmin
 setup_admin(app, db.engine)
 
 # Include API routers
+app.include_router(auth_router)
 app.include_router(candidates_router)
 app.include_router(task_templates_router)
 app.include_router(kanban_router)

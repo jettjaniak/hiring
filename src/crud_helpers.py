@@ -5,13 +5,16 @@ These helpers extract common patterns like:
 - Get-or-404 logic
 - Update field-by-field with None checks
 - Standard commit/refresh patterns
+- Automatic audit tracking (created_by/updated_by)
 """
 from datetime import datetime, timezone
-from typing import TypeVar, Type, Any, Dict, Optional
+from typing import TypeVar, Type, Any, Dict, Optional, TYPE_CHECKING
 from fastapi import HTTPException
 from sqlmodel import Session
 from sqlalchemy.inspection import inspect
 
+if TYPE_CHECKING:
+    from src.models import User
 
 ModelType = TypeVar("ModelType")
 
@@ -51,7 +54,8 @@ def update_model_fields(
     model: Any,
     updates: Dict[str, Any],
     exclude_fields: Optional[set] = None,
-    update_timestamp: bool = True
+    update_timestamp: bool = True,
+    current_user: Optional["User"] = None
 ) -> None:
     """
     Update model fields from a dictionary, skipping None values.
@@ -65,6 +69,7 @@ def update_model_fields(
         updates: Dictionary of field_name: value pairs
         exclude_fields: Set of field names to skip even if present in updates
         update_timestamp: If True, automatically update 'updated_at' field
+        current_user: Current authenticated user (for audit tracking)
     """
     exclude = exclude_fields or set()
 
@@ -87,18 +92,46 @@ def update_model_fields(
     if update_timestamp and hasattr(model, 'updated_at'):
         model.updated_at = datetime.now(timezone.utc)
 
+    # Update audit fields
+    if current_user and hasattr(model, 'updated_by'):
+        model.updated_by = current_user.username
 
-def commit_and_refresh(session: Session, model: Any) -> Any:
+
+def set_created_by(
+    model: Any,
+    current_user: Optional["User"] = None
+) -> None:
     """
-    Standard commit and refresh pattern.
+    Set the created_by field on a new model instance.
+
+    Args:
+        model: The model instance being created
+        current_user: Current authenticated user (for audit tracking)
+    """
+    if current_user and hasattr(model, 'created_by'):
+        model.created_by = current_user.username
+
+
+def commit_and_refresh(
+    session: Session,
+    model: Any,
+    current_user: Optional["User"] = None
+) -> Any:
+    """
+    Standard commit and refresh pattern with audit tracking.
 
     Args:
         session: Database session
         model: Model instance to commit
+        current_user: Current authenticated user (for audit tracking)
 
     Returns:
         The refreshed model instance
     """
+    # Set created_by if this is a new instance
+    if hasattr(model, 'created_by') and model.created_by is None and current_user:
+        model.created_by = current_user.username
+
     session.add(model)
     session.commit()
     session.refresh(model)

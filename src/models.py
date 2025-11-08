@@ -13,6 +13,22 @@ if TYPE_CHECKING:
     from typing import List
 
 
+class User(SQLModel, table=True):
+    """User account for authentication and assignment tracking"""
+    __tablename__ = "users"
+
+    username: str = Field(primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    full_name: Optional[str] = None
+
+    # System timestamps
+    created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def __str__(self):
+        return self.full_name or self.username
+
+
 class Candidate(SQLModel, table=True):
     """Candidate record"""
     __tablename__ = "candidates"
@@ -36,6 +52,10 @@ class Candidate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
+
     def __str__(self):
         return f"{self.name or self.email}"
 
@@ -56,6 +76,10 @@ class Checklist(SQLModel, table=True):
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
 
     def __str__(self):
         return self.name
@@ -78,6 +102,10 @@ class CandidateChecklistState(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
+
 
 class EmailTemplate(SQLModel, table=True):
     """Email template for candidate communications"""
@@ -97,6 +125,10 @@ class EmailTemplate(SQLModel, table=True):
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
+
     def __str__(self):
         return self.name
 
@@ -114,9 +146,16 @@ class TaskTemplate(SQLModel, table=True):
     completion_condition: Optional[str] = Field(default=None, sa_column=Column(Text))  # Expression for when task can be marked done
     display_condition: Optional[str] = Field(default=None, sa_column=Column(Text))  # Expression for when task should be displayed
 
+    # Assignment
+    default_dri: Optional[str] = Field(default=None, foreign_key="users.username")  # Default directly responsible individual
+
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
 
     def __str__(self):
         return self.name
@@ -136,6 +175,9 @@ class EmailTemplateTask(SQLModel, table=True):
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+
 
 class Task(SQLModel, table=True):
     """Task instance - actual work item that can be created from templates or ad-hoc"""
@@ -148,12 +190,19 @@ class Task(SQLModel, table=True):
     template_id: Optional[str] = Field(default=None, foreign_key="task_templates.task_id", ondelete="SET NULL")
     workflow_id: Optional[str] = None
 
+    # Assignment
+    assigned_to: Optional[str] = Field(default=None, foreign_key="users.username")
+
     # Relationships
     template: Optional["TaskTemplate"] = Relationship(sa_relationship_kwargs={"lazy": "select"})
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
+    updated_by: Optional[str] = Field(default=None, foreign_key="users.username")
 
     def __str__(self):
         return self.title
@@ -172,6 +221,9 @@ class TaskCandidateLink(SQLModel, table=True):
 
     # System timestamps
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Audit fields
+    created_by: Optional[str] = Field(default=None, foreign_key="users.username")
 
 
 # Validation: Template-based tasks must have exactly one candidate

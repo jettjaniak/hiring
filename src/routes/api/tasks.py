@@ -6,10 +6,10 @@ from sqlmodel import Session, select
 from pydantic import BaseModel
 from typing import Optional, List
 
-from ...models import Task, TaskTemplate, TaskCandidateLink, Candidate
-from ...dependencies import get_session
+from ...models import Task, TaskTemplate, TaskCandidateLink, Candidate, User
+from ...dependencies import get_session, get_current_user
 from ...constants import TaskStatus
-from ...crud_helpers import get_or_404, update_model_fields, commit_and_refresh
+from ...crud_helpers import get_or_404, update_model_fields, commit_and_refresh, set_created_by
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -43,7 +43,8 @@ class AddCandidatesRequest(BaseModel):
 @router.post("/task-templates/spawn", response_model=Task, status_code=201)
 def spawn_task(
     request: SpawnTaskRequest,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Spawn a task from a template for specific candidates
 
@@ -99,8 +100,10 @@ def spawn_task(
         description=description,
         status=TaskStatus.TODO,
         template_id=request.template_id,
-        workflow_id=workflow_id
+        workflow_id=workflow_id,
+        assigned_to=template.default_dri  # Use template's default DRI
     )
+    set_created_by(spawned_task, current_user)
     session.add(spawned_task)
     session.commit()
     session.refresh(spawned_task)
@@ -111,6 +114,7 @@ def spawn_task(
             task_id=spawned_task.id,
             candidate_email=email
         )
+        set_created_by(link, current_user)
         session.add(link)
     session.commit()
     session.refresh(spawned_task)  # Refresh after second commit to ensure object is attached
@@ -148,7 +152,8 @@ def get_spawned_task(task_id: int, session: Session = Depends(get_session)):
 @router.post("/tasks", response_model=Task, status_code=201)
 def create_spawned_task(
     request: CreateTaskRequest,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Create a new ad-hoc spawned task (not from template)"""
     # Validate status
@@ -168,6 +173,7 @@ def create_spawned_task(
         status=request.status,
         workflow_id=request.workflow_id
     )
+    set_created_by(spawned_task, current_user)
     session.add(spawned_task)
     session.commit()
     session.refresh(spawned_task)
@@ -178,6 +184,7 @@ def create_spawned_task(
             task_id=spawned_task.id,
             candidate_email=email
         )
+        set_created_by(link, current_user)
         session.add(link)
     session.commit()
     session.refresh(spawned_task)  # Refresh after second commit to ensure object is attached
@@ -189,7 +196,8 @@ def create_spawned_task(
 def update_spawned_task(
     task_id: int,
     request: UpdateTaskRequest,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Update a spawned task"""
     task = get_or_404(session, Task, task_id, "Spawned task")
@@ -202,8 +210,8 @@ def update_spawned_task(
         'title': request.title,
         'description': request.description,
         'status': request.status
-    })
-    return commit_and_refresh(session, task)
+    }, current_user=current_user)
+    return commit_and_refresh(session, task, current_user)
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
@@ -233,7 +241,8 @@ def get_task_candidates(task_id: int, session: Session = Depends(get_session)):
 def add_candidates_to_task(
     task_id: int,
     request: AddCandidatesRequest,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Add candidates to a spawned task"""
     task = session.get(Task, task_id)
@@ -272,6 +281,7 @@ def add_candidates_to_task(
                 task_id=task_id,
                 candidate_email=email
             )
+            set_created_by(link, current_user)
             session.add(link)
             added.append(email)
 

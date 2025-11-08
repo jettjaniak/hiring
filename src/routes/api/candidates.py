@@ -4,9 +4,9 @@ Candidate API routes
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
-from ...models import Candidate, Task, TaskCandidateLink, TaskTemplate, TaskStatus
-from ...crud_helpers import get_or_404, update_model_fields, commit_and_refresh
-from ...dependencies import get_session
+from ...models import Candidate, Task, TaskCandidateLink, TaskTemplate, TaskStatus, User
+from ...crud_helpers import get_or_404, update_model_fields, commit_and_refresh, set_created_by
+from ...dependencies import get_session, get_current_user
 
 router = APIRouter(prefix="/api/candidates", tags=["candidates"])
 
@@ -25,7 +25,8 @@ def create_candidate(
     phone: Optional[str] = None,
     resume_url: Optional[str] = None,
     notes: Optional[str] = None,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Create a new candidate"""
     candidate = Candidate(
@@ -36,6 +37,7 @@ def create_candidate(
         resume_url=resume_url,
         notes=notes
     )
+    set_created_by(candidate, current_user)
     session.add(candidate)
     session.commit()
     session.refresh(candidate)
@@ -68,7 +70,8 @@ def update_candidate(
     phone: Optional[str] = None,
     resume_url: Optional[str] = None,
     notes: Optional[str] = None,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Update a candidate"""
     candidate = get_or_404(session, Candidate, candidate_id, "Candidate")
@@ -79,8 +82,8 @@ def update_candidate(
         'phone': phone,
         'resume_url': resume_url,
         'notes': notes
-    })
-    return commit_and_refresh(session, candidate)
+    }, current_user=current_user)
+    return commit_and_refresh(session, candidate, current_user)
 
 
 @router.delete("/{candidate_id}", status_code=204)
@@ -149,7 +152,8 @@ def get_candidate_task(
 def create_candidate_task(
     candidate_email: str,
     task_identifier: str,
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Create a Task instance from a TaskTemplate for a specific candidate"""
     # Get candidate
@@ -182,8 +186,10 @@ def create_candidate_task(
         description=task_template.description,
         template_id=task_template.task_id,
         status=TaskStatus.TODO,
-        workflow_id=candidate.workflow_id
+        workflow_id=candidate.workflow_id,
+        assigned_to=task_template.default_dri  # Use template's default DRI
     )
+    set_created_by(new_task, current_user)
     session.add(new_task)
     session.flush()  # Flush to get the auto-generated ID
 
@@ -192,6 +198,7 @@ def create_candidate_task(
         task_id=new_task.id,
         candidate_email=candidate.email
     )
+    set_created_by(link, current_user)
     session.add(link)
     session.commit()
     session.refresh(new_task)
@@ -204,9 +211,9 @@ def update_candidate_task(
     candidate_email: str,
     task_identifier: str,
     status: Optional[str] = None,
-    assignee: Optional[str] = None,
-    notes: Optional[str] = None,
-    session: Session = Depends(get_session)
+    assigned_to: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """Update a Task instance for a specific candidate"""
     # Get the task
@@ -242,13 +249,11 @@ def update_candidate_task(
                     detail=f"Cannot mark task as done: completion condition not satisfied ({task_template.completion_condition})"
                 )
 
-    # Update fields if provided
-    if status is not None:
-        task.status = status
-    if assignee is not None:
-        task.assignee = assignee
-    if notes is not None:
-        task.notes = notes
+    # Update fields using helper
+    update_model_fields(task, {
+        'status': status,
+        'assigned_to': assigned_to
+    }, current_user=current_user)
 
     session.add(task)
     session.commit()
